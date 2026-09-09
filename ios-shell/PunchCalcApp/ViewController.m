@@ -11,7 +11,7 @@
  *  3) 崩溃时把原因写入 App Documents/crash.log（可在“文件”App 里看到）
  * ===================================================================*/
 
-@interface ViewController () <WKNavigationDelegate>
+@interface ViewController () <WKNavigationDelegate, WKScriptMessageHandler>
 @property (nonatomic, strong) WKWebView *webView;
 @end
 
@@ -58,13 +58,17 @@ static void _installCrashHandlers(void) {
         _writeLogLine(@"app launched, viewDidLoad reached");
 
         WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
-        /* 注意：这里不再写任何私有 KVC 键，避免系统版本差异导致异常闪退 */
+        /* 注意：这里不再写私有 KVC 键，避免系统版本差异导致异常闪退。
+         * 网络请求（公告/联网更新）由 JS 通过 nativeFetch 通道交给原生做，规避跨域限制。 */
+        [config.userContentController addScriptMessageHandler:self name:@"nativeFetch"];
 
         self.webView = [[WKWebView alloc] initWithFrame:self.view.bounds configuration:config];
         self.webView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         self.webView.navigationDelegate = self;
         self.webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
         self.webView.scrollView.bounces = NO;
+        /* iOS 兼容：禁用捏合缩放手势（配合页面 viewport user-scalable=no） */
+        self.webView.scrollView.pinchGestureRecognizer.enabled = NO;
         self.webView.opaque = NO;
         self.webView.backgroundColor = [UIColor colorWithRed:1.0 green:0.94 blue:0.94 alpha:1.0];
         self.webView.scrollView.backgroundColor = self.webView.backgroundColor;
@@ -143,6 +147,57 @@ static void _installCrashHandlers(void) {
         return UIStatusBarStyleDarkContent;
     }
     return UIStatusBarStyleDefault;
+}
+
+/* ---------- 原生取数通道（规避浏览器跨域限制） ---------- */
+- (void)userContentController:(WKUserContentController *)userContentController
+      didReceiveScriptMessage:(WKScriptMessage *)message {
+    if (![message.name isEqualToString:@"nativeFetch"]) return;
+    NSDictionary *body = [message.body isKindOfClass:[NSDictionary class]] ? message.body : @{};
+    NSString *cid = body[@"id"];
+    if (!cid) cid = @"";
+    NSString *url = body[@"url"];
+    if (![url isKindOfClass:[NSString class]] || url.length == 0) {
+        [self _evalNativeResult:NO cid:cid text:@""];
+        return;
+    }
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+    req.timeoutInterval = 14;
+    [req setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    __weak typeof(self) weak = self;
+    [[[NSURLSession sharedSession] dataTaskWithRequest:req
+                                     completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+        BOOL ok = NO;
+        NSString *text = @"";
+        if (err == nil && resp && data) {
+            NSInteger code = [(NSHTTPURLResponse *)resp statusCode];
+            if (code >= 200 && code < 300) {
+                ok = YES;
+                text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                if (!text) text = @"";
+            }
+        }
+        [weak _evalNativeResult:ok cid:cid text:text];
+    }] resume];
+}
+
+- (void)_evalNativeResult:(BOOL)ok cid:(NSString *)cid text:(NSString *)text {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!self.webView) return;
+        NSString *js = [NSString stringWithFormat:@"window.__nativeFetchResult && window.__nativeFetchResult(%@, %@, %@);",
+                        ok ? @"true" : @"false", [self _jsq:cid], [self _jsq:text]];
+        [self.webView evaluateJavaScript:js completionHandler:nil];
+    });
+}
+
+- (NSString *)_jsq:(NSString *)s {
+    if (!s) return @"\"\"";
+    NSString *e = [s stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"];
+    e = [e stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+    e = [e stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
+    e = [e stringByReplacingOccurrencesOfString:@"\r" withString:@"\\r"];
+    e = [e stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+    return [NSString stringWithFormat:@"\"%@\"", e];
 }
 
 @end

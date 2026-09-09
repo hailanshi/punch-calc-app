@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -17,7 +17,9 @@
   --danger:#e0526a;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:rgba(0,0,0,0);}
-html,body{height:100%; margin:0; padding:0;}
+html,body{height:100%; margin:0; padding:0;
+  touch-action:manipulation; overscroll-behavior-y:contain;}
+input,textarea,select{font-size:16px;}  /* 避免 iOS 点击输入框触发自动缩放 */
 body{
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   color:var(--ink); background:var(--soft); font-size:15px; line-height:1.5;
@@ -559,6 +561,35 @@ var HOLI_OFF = {
     '06-19':'端午节','06-20':'端午节','06-21':'端午节',
     '09-25':'中秋节','09-26':'中秋节','09-27':'中秋节',
     '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
+  },
+  /* 2027-2029 官方调休通知尚未发布，这里按国务院修订后法定节假日(除夕+初一~初三/清明/五一2天/端午/中秋/国庆3天)标注；
+   * 调休补班工作日会在官方通知发布后通过「联网更新」自动校正。 */
+  '2027':{
+    '01-01':'元旦',
+    '02-05':'春节(除夕)','02-06':'春节','02-07':'春节','02-08':'春节',
+    '04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-09':'端午节',
+    '09-15':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2028':{
+    '01-01':'元旦',
+    '01-25':'春节(除夕)','01-26':'春节','01-27':'春节','01-28':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '05-28':'端午节',
+    '10-03':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2029':{
+    '01-01':'元旦',
+    '02-12':'春节(除夕)','02-13':'春节','02-14':'春节','02-15':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-16':'端午节',
+    '09-22':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
   }
 };
 var MAKEUP = {
@@ -592,6 +623,37 @@ function getStdMap(){ var m = storeGet(LS_STD, {}); return m && typeof m === 'ob
 function setStdMap(m){ storeSet(LS_STD, m); }
 function getThemeKey(){ var t = storeGet(LS_THEME, 'pink'); return THEMES[t] ? t : 'pink'; }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+/* ---------- 阻止缩放（手势 + 双指） ---------- */
+function blockGesture(e){ if (e) e.preventDefault(); }
+document.addEventListener('gesturestart', blockGesture, {passive:false});
+document.addEventListener('gesturechange', blockGesture, {passive:false});
+document.addEventListener('gestureend', blockGesture, {passive:false});
+
+/* ---------- 跨域取数：App 内走原生壳，网页里走 fetch ---------- */
+var _nfSeq = 0, _nfCbs = {};
+function nativeFetchOn(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.nativeFetch); }
+window.__nativeFetchResult = function(ok, id, text){
+  var cb = _nfCbs[id];
+  if (cb){ _nfCbs[id] = null; try{ cb(!!ok, String(text||'')); }catch(e){} }
+};
+function apiGetText(url, timeoutMs, cb){
+  cb = cb || function(){};
+  var tms = timeoutMs || 12000;
+  if (nativeFetchOn()){
+    var id = 'nf' + (_nfSeq++);
+    _nfCbs[id] = cb;
+    var send = function(){ try{ window.webkit.messageHandlers.nativeFetch.postMessage({id:id, url:url}); }catch(e){ _nfCbs[id]=null; cb(false,''); } };
+    try{ send(); }catch(e){ _nfCbs[id]=null; cb(false,''); }
+    setTimeout(function(){ if (_nfCbs[id]){ _nfCbs[id]=null; cb(false,''); } }, tms);
+    return;
+  }
+  var ctl = new AbortController();
+  var timer = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, tms);
+  fetch(url, {mode:'cors', signal:ctl.signal})
+    .then(function(r){ clearTimeout(timer); if (!r.ok){ cb(false,''); return; } return r.text().then(function(t){ cb(true,t); }); })
+    .catch(function(){ clearTimeout(timer); cb(false,''); });
+}
 
 /* ---------------- 工具 ---------------- */
 function $(id){ return document.getElementById(id); }
@@ -752,23 +814,22 @@ function setBanner(text){
 function loadBanner(){
   setBanner(bannerText());
   try{
-    var ctl = new AbortController();
-    var timer = setTimeout(function(){ try{ctl.abort();}catch(e){} }, 8000);
-    fetch('https://uapis.cn/api/v1/social/qq/userinfo?qq=3126473', {signal:ctl.signal})
-      .then(function(r){ return r.json(); })
-      .then(function(j){
-        clearTimeout(timer);
-        var nick = j.nick || j.nickname || j.name || '';
-        var sign = j.sign || j.signature || j.long_nick || j.qmd || j.motto || '';
-        var t;
-        if (nick){
-          t = '🐧 ' + nick + (sign ? ' · ' + sign : ' · 今天也要元气满满地打卡') ;
-        } else {
-          t = bannerText();
-        }
-        setBanner(t);
-      })
-      .catch(function(){ clearTimeout(timer); /* 保持欢迎语 */ });
+    var ctl = function(){};
+    apiGetText('https://uapis.cn/api/v1/social/qq/userinfo?qq=3126473', 9000, function(ok, text){
+      if (!ok || !text){ /* 保持欢迎语 */ return; }
+      var j;
+      try{ j = JSON.parse(text); }catch(e){ return; }
+      if (!j) return;
+      var nick = j.nick || j.nickname || j.name || '';
+      var sign = j.sign || j.signature || j.long_nick || j.qmd || j.motto || '';
+      var t;
+      if (nick){
+        t = '🐧 ' + nick + (sign ? ' · ' + sign : ' · 今天也要元气满满地打卡') ;
+      } else {
+        t = bannerText();
+      }
+      setBanner(t);
+    });
   }catch(e){}
 }
 
@@ -1460,47 +1521,39 @@ function netUpdateStd(){
     if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
     var ym = _curYM;
     var url = 'https://uapis.cn/api/v1/misc/holiday-calendar?month=' + ym;
-    var ctl = new AbortController();
-    var timer = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 12000);
-    fetch(url, {signal:ctl.signal})
-      .then(function(r){ return r.json(); })
-      .then(function(j){
-        clearTimeout(timer);
-        var wd = null;
-        try{
-          if (j && j.summary && isFinite(+j.summary.workdays)) wd = +j.summary.workdays;
-          else if (j && j.data && j.data.summary && isFinite(+j.data.summary.workdays)) wd = +j.data.summary.workdays;
-          else if (j && j.days && Array.isArray(j.days)){
-            var c = 0;
-            for (var i=0;i<j.days.length;i++){ if (j.days[i] && j.days[i].is_workday === true) c++; }
-            if (c > 0) wd = c;
-          }
-        }catch(e){}
-        if (wd === null || wd <= 0){
-          toast('接口未返回有效工作日数，已保留原值', 'bad');
-          return;
+    apiGetText(url, 12000, function(ok, text){
+      if (!ok || !text){ toast('联网更新失败，已保留原数值', 'bad'); resetNetBtn(btn); return; }
+      var j;
+      try{ j = JSON.parse(text); }catch(e){ toast('接口数据异常，已保留原数值', 'bad'); resetNetBtn(btn); return; }
+      var wd = null;
+      try{
+        if (j && j.summary && isFinite(+j.summary.workdays)) wd = +j.summary.workdays;
+        else if (j && j.data && j.data.summary && isFinite(+j.data.summary.workdays)) wd = +j.data.summary.workdays;
+        else if (j && j.days && Array.isArray(j.days)){
+          var c = 0;
+          for (var i=0;i<j.days.length;i++){ if (j.days[i] && j.days[i].is_workday === true) c++; }
+          if (c > 0) wd = c;
         }
-        var std = wd * 8;
-        var map = getStdMap();
-        map[ym] = std;
-        setStdMap(map);
-        var S = getSet(); S.std = std; setSet(S);   // 同时作为默认值
-        $('sStd').value = std;
-        $('uStd').textContent = ymLabel(ym) + '：工作日 ' + wd + ' 天 × 8 = ' + std + 'h（已写入，支持调休）';
-        toast('联网更新成功：' + ymLabel(ym) + ' 标准工时 ' + std + 'h', 'good');
-        refreshHome();
-      })
-      .catch(function(){
-        clearTimeout(timer);
-        toast('联网更新失败，已保留原数值', 'bad');
-      })
-      .finally(function(){
-        if (btn) { btn.disabled = false; btn.textContent = '🌐 联网更新（当月工作日 × 8）'; }
-      });
+      }catch(e){}
+      if (wd === null || wd <= 0){ toast('接口未返回有效工作日数，已保留原值', 'bad'); resetNetBtn(btn); return; }
+      var std = wd * 8;
+      var map = getStdMap();
+      map[ym] = std;
+      setStdMap(map);
+      var S = getSet(); S.std = std; setSet(S);   // 同时作为默认值
+      $('sStd').value = std;
+      $('uStd').textContent = ymLabel(ym) + '：工作日 ' + wd + ' 天 × 8 = ' + std + 'h（已写入，支持调休）';
+      toast('联网更新成功：' + ymLabel(ym) + ' 标准工时 ' + std + 'h', 'good');
+      resetNetBtn(btn);
+      refreshHome();
+    });
   }catch(e){
-    var b2 = $('netBtn'); if (b2){ b2.disabled = false; b2.textContent = '🌐 联网更新（当月工作日 × 8）'; }
+    resetNetBtn($('netBtn'));
     toast('联网更新失败，已保留原数值', 'bad');
   }
+}
+function resetNetBtn(btn){
+  if (btn) { btn.disabled = false; btn.textContent = '🌐 联网更新（当月工作日 × 8）'; }
 }
 
 /* ---------------- 法定节假日管理 ---------------- */
@@ -1521,8 +1574,8 @@ function renderHolidays(){
     cHtml += '</div>';
     $('holiCustomWrap').innerHTML = cHtml;
 
-    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置法定节假日（2024–2026，不可删除）</div>';
-    var years = ['2024','2025','2026'];
+    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置法定节假日（2024–2029，不可删除）</div>';
+    var years = ['2024','2025','2026','2027','2028','2029'];
     var cnt = 0;
     for (var y=0;y<years.length;y++){
       var off = HOLI_OFF[years[y]] || {};
