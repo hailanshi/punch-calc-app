@@ -75,12 +75,18 @@ jobs:
           git push origin debug-log --force 2>&1 | tail -3
           echo "done"
 
-      - name: Ad-hoc sign
+      - name: Bundle HTML & sign
         if: steps.check.outputs.status == 'ok'
         working-directory: ios-shell/PunchCalcApp
         run: |
           APP="build/Build/Products/Release-iphoneos/PunchCalc.app"
+          cp Resources/index.html "$APP/index.html"
+          mkdir -p "$APP/www"
+          cp Resources/index.html "$APP/www/index.html"
+          [ -f Resources/AppIcon60x60@3x.png ] && cp Resources/AppIcon60x60@3x.png "$APP/AppIcon60x60@3x.png" || true
+          [ -f Resources/AppIcon60x60@2x.png ] && cp Resources/AppIcon60x60@2x.png "$APP/AppIcon60x60@2x.png" || true
           codesign --force --sign - "$APP" || true
+          echo "bundle 内容:"; ls -la "$APP"
 
       - name: Package IPA
         if: steps.check.outputs.status == 'ok'
