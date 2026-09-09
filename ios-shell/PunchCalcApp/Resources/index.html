@@ -288,9 +288,15 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
       <div class="card pad">
         <div style="font-weight:700;font-size:15px;margin-bottom:4px;">自动补卡</div>
-        <div style="font-size:12px;color:var(--ink3);margin-bottom:10px;">默认工时 <span id="autoHrInfo">11</span> 小时（8正常 + 3平日加班），跳过周末、法定节假日和已有记录的日期，点击直接执行、无需确认。</div>
-        <button type="button" class="btn soft block" style="margin-bottom:8px;" onclick="window.backfillToday()">① 补卡到今天</button>
-        <button type="button" class="btn soft block" onclick="window.backfillAll()">② 本月全部补卡</button>
+        <div style="font-size:12px;color:var(--ink3);margin-bottom:8px;">选择要补的月份，再点按钮；跳过周末、法定节假日和已有记录的日期，点击直接执行。</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <select id="bfYear" onchange="window.bfYearChange()" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;-webkit-appearance:none;color:var(--ink);"></select>
+          <select id="bfMonth" onchange="window.bfYearChange()" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;-webkit-appearance:none;color:var(--ink);"></select>
+        </div>
+        <div class="hint" style="margin-bottom:8px;" id="bfHint">—</div>
+        <div class="hint" style="margin-bottom:10px;">默认工时 <span id="autoHrInfo">11</span> 小时（8正常 + 3平日加班）· 该月标准工时按「该月工作日×8」自动算，联网更新可校正。</div>
+        <button type="button" class="btn soft block" style="margin-bottom:8px;" onclick="window.backfillToday()">① 补卡到这个月（到今日）</button>
+        <button type="button" class="btn soft block" onclick="window.backfillAll()">② 补卡整个月</button>
       </div>
     </div>
   </section>
@@ -730,6 +736,7 @@ function showPage(name){
   if (nav) nav.style.display = (navPages.indexOf(name) >= 0) ? 'flex' : 'none';
   _curPage = name;
   if (name==='home'){ refreshHome(); }
+  if (name==='punch'){ bfPopulate(); }
   if (name==='records'){ refreshRecords(); }
   if (name==='settings'){ renderSettings(); }
   if (name==='holidays'){ renderHolidays(); }
@@ -835,8 +842,11 @@ function loadBanner(){
 
 /* ---------------- 首页：月统计 + 工资 ---------------- */
 function stdHoursForMonth(ym){
+  /* 优先用「联网更新 / 手动写入」的该月标准工时；否则按该月工作日×8 自动算，使各月标准工时不同 */
   var map = getStdMap();
-  if (map[ym]) return map[ym];
+  if (map[ym] && map[ym] > 0) return map[ym];
+  var wd = offlineWorkdays(ym);
+  if (wd > 0) return wd * 8;
   var s = getSet();
   return (s.std > 0) ? s.std : 174;
 }
@@ -1162,19 +1172,53 @@ function punchBack(){
 function cancelPunch(){ _editDate=''; resetPunchForm(); }
 
 /* ---------------- 补卡（无确认，直接执行 + toast） ---------------- */
+var _bfYM = '';   // 补卡选定的月份 YYYY-MM
+function bfPopulate(){
+  var y = $('bfYear'), m = $('bfMonth');
+  if (!y || !m) return;
+  if (!y.options.length){
+    for (var i=2024; i<=2035; i++){ var o = document.createElement('option'); o.value = i; o.textContent = i + '年'; y.appendChild(o); }
+  }
+  if (!m.options.length){
+    for (var j=1; j<=12; j++){ var o2 = document.createElement('option'); o2.value = j; o2.textContent = j + '月'; m.appendChild(o2); }
+  }
+  var now = ymNow(), p = ymParts(now);
+  y.value = p.y; m.value = p.m;
+  bfYearChange();
+}
+function bfReadYM(){
+  var y = $('bfYear'), m = $('bfMonth');
+  if (!y || !m) return '';
+  var mm = (m.value.length < 2 ? ('0' + m.value) : String(m.value));
+  _bfYM = (+y.value) + '-' + mm;
+  return _bfYM;
+}
+function bfYearChange(){
+  var ym = bfReadYM();
+  var hi = $('bfHint');
+  if (hi && ym){
+    var wd = offlineWorkdays(ym);
+    var std = stdHoursForMonth(ym);
+    hi.textContent = ymLabel(ym) + '：工作日约 ' + wd + ' 天 → 标准工时 ' + std + 'h';
+  }
+}
 function backfillBase(ym, uptoToday){
+  if (!ym) ym = ymNow();
   var S = getSet();
   var defH = (S.auto > 0) ? S.auto : 11;
   var p = ymParts(ym);
-  var end = uptoToday ? parseInt(todayStr().split('-')[2], 10) : monthDays(p.y, p.m);
+  var now = ymNow();
+  var isCur = (ym === now);
   var today = todayStr();
+  var end = monthDays(p.y, p.m);
+  if (uptoToday && isCur) end = parseInt(today.split('-')[2], 10);
   var recs = getRecs();
   var map = {};
   for (var i=0;i<recs.length;i++){ map[recs[i].date] = true; }
   var succ=0, skip=0, fail=0;
   for (var day=1; day<=end; day++){
     var ds = ym + '-' + pad2(day);
-    if (uptoToday && ds > today) break;
+    if (uptoToday && isCur && ds > today) break;
     try{
       var c = classify(ds);
       if (c.type === 'holiday' || c.type === 'weekend'){ skip++; continue; }
@@ -1192,15 +1236,14 @@ function backfillBase(ym, uptoToday){
 }
 function backfillToday(){
   try{
-    var now = ymNow();
-    backfillBase(now, true);
+    var ym = bfReadYM() || ymNow();
+    backfillBase(ym, true);
   }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
 function backfillAll(){
   try{
-    /* “本月全部补卡”按当前自然月补齐，与按钮文案一致 */
-    var now = ymNow();
-    backfillBase(now, false);
+    var ym = bfReadYM() || ymNow();
+    backfillBase(ym, false);
   }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
 
@@ -1473,8 +1516,7 @@ function renderSettings(){
     $('sSocial').value = S.social;
     var map = getStdMap();
     $('uBase').textContent = '加班时薪按 底薪 ÷ 标准工时 折算';
-    $('uStd').textContent = (map[_curYM] ? ('当前查看月 ' + ymLabel(_curYM) + ' 已用联网值 ' + map[_curYM] + 'h（工作日×8）· ') : '')
-      + '默认 174h；联网更新会按「当月工作日数 × 8」写入（支持调休）。';
+    $('uStd').textContent = '每月标准工时（该月工作日 × 8）自动计算，使不同月份各不相同；联网更新可校正「工作日×8」。(当前月 ' + ymLabel(_curYM) + ' 标准 ' + stdHoursForMonth(_curYM) + 'h)';
     $('uAuto').textContent = '补卡默认拆分：8h 正常出勤 + 其余按平日加班';
     $('autoHrInfo').textContent = S.auto;
     renderThemeDots();
@@ -1712,6 +1754,9 @@ window.addHoliday = addHoliday;
 window.delCustomHoliday = delCustomHoliday;
 window.backfillToday = backfillToday;
 window.backfillAll = backfillAll;
+window.bfPopulate = bfPopulate;
+window.bfYearChange = bfYearChange;
+window.bfReadYM = bfReadYM;
 window.askConfirm = askConfirm;
 window.doConfirmOK = doConfirmOK;
 window.doConfirmCancel = doConfirmCancel;
