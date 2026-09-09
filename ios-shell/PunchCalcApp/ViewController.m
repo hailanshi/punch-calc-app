@@ -1,5 +1,7 @@
 #import "ViewController.h"
 #import <WebKit/WebKit.h>
+#import <signal.h>
+#import <stdlib.h>
 
 /* =====================================================================
  * 极简 iOS 壳：只负责把本地单文件 HTML 装进 WKWebView 并加载。
@@ -36,7 +38,7 @@ static void _crashHandler(NSException *e) {
 
 static void _signalHandler(int sig) {
     _writeLogLine([NSString stringWithFormat:@"Signal: %d", sig]);
-    _exit(0);
+    exit(0);
 }
 
 static void _installCrashHandlers(void) {
@@ -123,12 +125,12 @@ static void _installCrashHandlers(void) {
     decisionHandler(WKNavigationActionPolicyAllow);
 }
 
-- (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(nullability WKNavigation *)navigation
+- (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation
       withError:(NSError *)error {
     _writeLogLine([NSString stringWithFormat:@"webview load error: %@", error.localizedDescription ?: @""]);
 }
 
-- (void)webView:(WKWebView *)webView didFinishNavigation:(nullability WKNavigation *)navigation {
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
     _writeLogLine(@"webview load finished OK");
 }
 
