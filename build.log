@@ -1,0 +1,32 @@
+===== SCHEMES =====
+Command line invocation:
+    /Applications/Xcode_15.4.app/Contents/Developer/usr/bin/xcodebuild -list -project PunchCalc.xcodeproj
+
+User defaults from command line:
+    IDEPackageSupportUseBuiltinSCM = YES
+
+2026-09-09 14:27:33.690 xcodebuild[2488:10570] Writing error result bundle to /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/ResultBundle_2026-09-09_14-27-0033.xcresult
+xcodebuild: error: Unable to read project 'PunchCalc.xcodeproj'.
+	Reason: The project ‘PunchCalc’ cannot be opened because it is in a future Xcode project file format (77). Adjust the project format using a compatible version of Xcode to allow it to be opened by this version of Xcode.
+
+
+===== BUILD START =====
+Command line invocation:
+    /Applications/Xcode_15.4.app/Contents/Developer/usr/bin/xcodebuild -project PunchCalc.xcodeproj -scheme PunchCalc -configuration Release -destination generic/platform=iOS -derivedDataPath build -sdk iphoneos CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+
+User defaults from command line:
+    IDEDerivedDataPathOverride = /Users/runner/work/punch-calc-app/punch-calc-app/ios-shell/PunchCalcApp/build
+    IDEPackageSupportUseBuiltinSCM = YES
+
+Build settings from command line:
+    CODE_SIGN_IDENTITY = 
+    CODE_SIGNING_ALLOWED = NO
+    CODE_SIGNING_REQUIRED = NO
+    SDKROOT = iphoneos17.5
+
+2026-09-09 14:27:35.748 xcodebuild[2620:11174] Writing error result bundle to /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/ResultBundle_2026-09-09_14-27-0035.xcresult
+xcodebuild: error: Unable to read project 'PunchCalc.xcodeproj'.
+	Reason: The project ‘PunchCalc’ cannot be opened because it is in a future Xcode project file format (77). Adjust the project format using a compatible version of Xcode to allow it to be opened by this version of Xcode.
+
+
+===== BUILD END =====
