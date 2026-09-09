@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="打卡工资">
+<meta name="theme-color" id="metaTheme" content="#FF80AB">
+<title>打卡工资计算器</title>
+<style>
+:root{
+  --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
+  --card:#ffffff; --line:#ffe2ea; --chip:#ffe4ee; --chipInk:#e0608a;
+  --ink:#55382c; --ink2:#96725f; --ink3:#c3a693;
+  --danger:#e0526a;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:rgba(0,0,0,0);}
+html,body{height:100%; margin:0; padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  color:var(--ink); background:var(--soft); font-size:15px; line-height:1.5;
+  -webkit-text-size-adjust:100%;
+  overflow:hidden;
+}
+#root{position:fixed; top:0; left:0; right:0; bottom:0; background:var(--soft); overflow:hidden;}
+
+/* ---------- pages ---------- */
+.page{position:absolute; top:0; left:0; right:0; bottom:0; display:none; flex-direction:column; background:var(--soft);}
+.page.on{display:flex;}
+.topbar{flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+  padding:calc(env(safe-area-inset-top, 0px) + 8px) 16px 6px; min-height:46px;}
+.topbar .title{font-size:17px; font-weight:700;}
+.topbar .sub{font-size:12px; color:var(--ink3);}
+.btnText{border:0; background:transparent; color:var(--main-deep); font-size:14px; padding:6px 8px; border-radius:9px; font-weight:600;}
+.btnText:active{background:var(--chip);}
+.scroll{flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 14px calc(96px + env(safe-area-inset-bottom,0px));}
+
+/* ---------- cards ---------- */
+.card{background:var(--card); border-radius:18px; margin:10px 0; box-shadow:0 3px 12px rgba(200,140,120,.10); overflow:hidden;}
+.card.pad{padding:14px;}
+.cardHead{display:flex; align-items:center; justify-content:space-between; width:100%; border:0; background:transparent;
+  padding:13px 16px; font-size:15px; font-weight:700; color:var(--ink); text-align:left;}
+.cardHead .chev{color:var(--ink3); font-size:11px; transition:transform .2s; margin-left:6px;}
+.cardBody{display:none; padding:0 16px 15px;}
+.open .chev{transform:rotate(90deg);}
+.open .cardBody{display:block;}
+.collapsed .chev{transform:rotate(0deg);}
+.collapsed .cardBody{display:none;}
+
+/* total card */
+.totalCard{background:linear-gradient(135deg, var(--main), var(--main-deep)); color:#fff; border-radius:20px;
+  padding:18px 18px 16px; margin:8px 0 4px; box-shadow:0 6px 16px rgba(0,0,0,.08);}
+.totalCard .lbl{font-size:13px; opacity:.9;}
+.totalCard .money{font-size:40px; font-weight:800; letter-spacing:.5px; margin:2px 0 6px;}
+.totalCard .money small{font-size:18px; font-weight:700; margin-right:3px;}
+.totalCard .meta{font-size:12px; opacity:.92;}
+
+/* month switch */
+.monthBar{display:flex; align-items:center; justify-content:space-between; margin:8px 2px 0;}
+.monthBar .ym{font-size:16px; font-weight:700;}
+.mIcon{width:34px;height:34px;border-radius:50%;border:0;background:var(--card);color:var(--main-deep);font-size:18px;
+  box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.mIcon:active{background:var(--chip);}
+
+/* rows */
+.dl{width:100%;}
+.dl>div{display:flex; justify-content:space-between; align-items:center; padding:8px 2px; border-bottom:1px dashed var(--line); font-size:14px;}
+.dl>div:last-child{border-bottom:0;}
+.dl .k{color:var(--ink2);}
+.dl .v{font-weight:700;}
+.dl .v.red{color:var(--danger);}
+.dl .v.green{color:#3d9a63;}
+
+/* notice marquee */
+.notice{flex:0 0 auto; margin:2px 0 4px; background:var(--card); overflow:hidden; border-radius:12px; height:34px;
+  display:flex; align-items:center; box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.notice .nt{display:inline-block; white-space:nowrap; padding-left:100%; animation:marq 22s linear infinite; color:var(--ink2); font-size:13px; will-change:transform;}
+.notice .nt span{display:inline-block; padding-right:60px;}
+@keyframes marq{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+/* duplicate block trick */
+.notice .dup{white-space:nowrap; display:flex; width:max-content; animation:marq2 22s linear infinite; will-change:transform;}
+@keyframes marq2{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.notice .dup b{font-weight:400; display:inline-block; padding-right:64px;}
+
+/* bottom nav */
+.bottomNav{position:absolute; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line);
+  display:flex; padding:6px 8px calc(env(safe-area-inset-bottom,0px) + 6px);}
+.navItem{flex:1; border:0; background:transparent; color:var(--ink3); font-size:11px; padding:4px 0; display:flex; flex-direction:column; align-items:center; border-radius:12px;}
+.navItem .ic{font-size:20px; line-height:1; margin-bottom:2px;}
+.navItem.on{color:var(--main-deep); font-weight:700;}
+.navItem:active{background:var(--chip);}
+
+/* buttons */
+.btn{border:0; border-radius:14px; padding:12px 16px; font-size:14px; font-weight:700; cursor:pointer;}
+.btn.block{width:100%; display:block;}
+.btn.main{background:var(--main); color:#fff; box-shadow:0 4px 12px rgba(0,0,0,.10);}
+.btn.main:active{background:var(--main-deep);}
+.btn.soft{background:var(--chip); color:var(--main-deep);}
+.btn.ghost{background:var(--card); color:var(--ink2); border:1px solid var(--line);}
+.btn.danger{background:var(--danger); color:#fff;}
+.btn.mini{padding:7px 12px; border-radius:12px; font-size:13px;}
+.btn:disabled{opacity:.5;}
+.chips{display:flex; flex-wrap:wrap;}
+.chip{border:0; background:var(--chip); color:var(--chipInk); border-radius:10px; padding:6px 11px; font-size:13px; font-weight:600; margin:0 6px 6px 0;}
+.chip:active{opacity:.7;}
+
+/* form */
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:13px; color:var(--ink2); margin-bottom:5px; font-weight:600;}
+.field input[type=number],.field input[type=text],.field input[type=date]{
+  width:100%; border:1px solid var(--line); border-radius:12px; background:var(--soft2);
+  padding:11px 12px; font-size:15px; color:var(--ink); -webkit-appearance:none; appearance:none;}
+.field input:focus{outline:none; border-color:var(--main);}
+.unit{font-size:12px; color:var(--ink3); margin-top:3px;}
+.accBody{display:none; padding:2px 14px 14px;}
+.accBody.on{display:block;}
+.accHead{width:100%; border:0; background:transparent; text-align:left; padding:13px 14px; font-size:15px; font-weight:700; color:var(--ink); display:flex; align-items:center; justify-content:space-between;}
+.accHead .chev{color:var(--ink3); font-size:11px; transform:rotate(0deg); transition:transform .2s;}
+.accHead.on .chev{transform:rotate(90deg);}
+
+/* type pick */
+.typeRow{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.typeItem{border:1px solid var(--line); background:var(--card); border-radius:14px; padding:11px 8px; text-align:center;}
+.typeItem .nm{font-size:14px; font-weight:700;}
+.typeItem .ds{font-size:11px; color:var(--ink3); margin-top:2px;}
+.typeItem.on{border-color:var(--main); background:var(--chip);}
+.typeItem.on .nm{color:var(--main-deep);}
+
+/* records */
+.rec{background:var(--card); border-radius:16px; margin:8px 0; padding:11px 12px; box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.rec .top{display:flex; align-items:center; justify-content:space-between;}
+.rec .d{font-size:15px; font-weight:700;}
+.rec .w{font-size:12px; color:var(--ink3); margin-left:6px;}
+.badge{font-size:11px; border-radius:8px; padding:2px 8px; font-weight:700;}
+.badge.work{background:#fff3e0; color:#c27e2a;}
+.badge.holiday_rest{background:#fff0f4; color:#e0608a;}
+.badge.rest{background:#eaf6ee; color:#3d9a63;}
+.badge.absent{background:#fdecec; color:#c0392b;}
+.rec .sub{font-size:12px; color:var(--ink2); margin-top:3px;}
+.rec .note{font-size:12px; color:var(--ink3); margin-top:3px; word-break:break-all;}
+.rec .ops{display:flex; margin-top:8px;}
+.opBtn{border:0; background:var(--soft2); color:var(--main-deep); font-size:12px; padding:5px 12px; border-radius:9px; margin-right:8px; font-weight:600;}
+.opBtn.del{color:var(--danger);}
+.opBtn:active{background:var(--chip);}
+
+/* tabs row */
+.toolRow{display:flex; align-items:center; justify-content:space-between; margin:6px 0;}
+.toolRow .mIcon{width:30px;height:30px; font-size:15px;}
+.toolWrap{display:flex; flex-wrap:wrap; margin:4px 0;}
+.toolWrap .chip{display:flex; align-items:center; gap:4px;}
+
+/* toast */
+#toasts{position:fixed; top:calc(env(safe-area-inset-top,0px) + 14px); left:0; right:0; z-index:1200; display:flex; flex-direction:column; align-items:center; pointer-events:none;}
+.toast{background:rgba(60,40,30,.92); color:#fff; font-size:13px; border-radius:12px; padding:9px 16px; margin-top:8px;
+  max-width:86%; box-shadow:0 4px 14px rgba(0,0,0,.18); animation:tin .18s ease-out; text-align:center;}
+.toast.good{background:rgba(46,125,84,.94);}
+.toast.bad{background:rgba(176,58,76,.95);}
+@keyframes tin{from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:none;}}
+
+/* overlays / sheets */
+.overlay{position:fixed; top:0; left:0; right:0; bottom:0; display:none; z-index:1000;}
+.overlay.on{display:block;}
+.backdrop{position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(40,25,20,.42);}
+.sheet{position:absolute; left:0; right:0; bottom:0; background:var(--soft); border-radius:22px 22px 0 0;
+  display:flex; flex-direction:column; max-height:86%; box-shadow:0 -6px 26px rgba(0,0,0,.16);
+  padding-bottom:env(safe-area-inset-bottom,0px);}
+.sheetHead{flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+  padding:14px 16px 10px; border-bottom:1px solid var(--line); font-size:16px; font-weight:700;}
+.sheetBody{flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px 16px;}
+.sheetFoot{flex:0 0 auto; display:flex; padding:10px 14px 6px; border-top:1px solid var(--line);}
+.sheetFoot .btn{flex:1; margin:0 5px;}
+textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border-radius:12px; background:var(--card);
+  font-size:12px; color:var(--ink2); padding:10px; -webkit-appearance:none; resize:vertical;}
+
+.alert{font-size:13px; color:var(--ink2);}
+.spacer{height:8px;}
+
+.hr{height:1px; background:var(--line); margin:14px 0;}
+.hint{font-size:12px; color:var(--ink3);}
+.notice-badge{background:var(--chip); color:var(--main-deep); border-radius:10px; padding:2px 9px; font-size:12px; font-weight:700;}
+.pill{display:inline-block; background:var(--chip); color:var(--main-deep); border-radius:10px; padding:3px 10px; font-size:12px; font-weight:700;}
+
+/* theme dots */
+.dots{display:flex; align-items:center;}
+.dot{width:26px; height:26px; border-radius:50%; margin-right:10px; border:3px solid #fff; box-shadow:0 0 0 1px var(--line), 0 2px 6px rgba(0,0,0,.08);}
+.dot.on{box-shadow:0 0 0 2px var(--ink2), 0 2px 6px rgba(0,0,0,.12);}
+.helpSec{margin-bottom:6px;}
+.helpSec h3{font-size:15px; margin:14px 0 6px;}
+.helpSec p,.helpSec li{font-size:13px; color:var(--ink2); margin:4px 0;}
+.fx{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; background:var(--card); border-radius:8px; padding:8px 10px; color:var(--ink); overflow-x:auto; white-space:pre-wrap; word-break:break-word;}
+.listRow{display:flex; align-items:center; justify-content:space-between; padding:9px 2px; border-bottom:1px dashed var(--line); font-size:14px;}
+.listRow:last-child{border-bottom:0;}
+</style>
+</head>
+<body>
+<div id="root">
+
+  <!-- ==================== 首页 ==================== -->
+  <section id="page-home" class="page on">
+    <header class="topbar">
+      <div class="title">打卡工资计算器</div>
+      <div style="display:flex;align-items:center;">
+        <span class="notice-badge" id="recCountTop" style="margin-right:6px;">0</span>
+        <button type="button" class="btnText" onclick="window.showHelp()">说明</button>
+      </div>
+    </header>
+
+    <div class="notice"><div class="dup" id="bannerDup"></div></div>
+
+    <div class="scroll" style="padding-top:2px;">
+      <div class="monthBar">
+        <button type="button" class="mIcon" onclick="window.shiftMonth(-1)">‹</button>
+        <div class="ym" id="monthLabel">----</div>
+        <button type="button" class="mIcon" onclick="window.shiftMonth(1)">›</button>
+      </div>
+
+      <div class="totalCard">
+        <div class="lbl" id="totalLbl">本月总收入</div>
+        <div class="money" id="totalMoney">¥0.00</div>
+        <div class="meta" id="totalMeta"></div>
+      </div>
+
+      <div class="card collapsed">
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">收入明细<span class="chev">▶</span></button>
+        <div class="cardBody">
+          <div class="dl" id="incomeRows"></div>
+          <div class="hint" id="incomeHint" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <div class="card collapsed">
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">工时统计<span class="chev">▶</span></button>
+        <div class="cardBody">
+          <div class="dl" id="hoursRows"></div>
+          <div class="hint" id="hoursHint" style="margin-top:8px;"></div>
+        </div>
+      </div>
+      <div class="card pad" id="quickInfo" style="display:none;">
+        <div style="font-size:13px; color:var(--ink2);" id="quickInfoText"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 打卡 / 记录编辑器 ==================== -->
+  <section id="page-punch" class="page">
+    <header class="topbar">
+      <button type="button" class="btnText" id="punchBackBtn" onclick="window.punchBack()">‹ 首页</button>
+      <div class="title" id="punchTitle">上班打卡</div>
+      <span style="width:52px;"></span>
+    </header>
+    <div class="scroll">
+      <div class="card pad">
+        <div class="field">
+          <label>日期</label>
+          <input type="date" id="pDate" onchange="window.punchChanged()">
+          <div style="margin-top:7px;"><span class="pill" id="pCat">--</span> <span style="font-size:12px;color:var(--ink3);" id="pCatNote"></span></div>
+        </div>
+        <div class="field">
+          <label>打卡类型</label>
+          <div class="typeRow" id="typeRow">
+            <button type="button" class="typeItem" data-t="work" onclick="window.pickType('work')"><div class="nm">上班打卡</div><div class="ds">计正常工时+加班</div></button>
+            <button type="button" class="typeItem" data-t="holiday" onclick="window.pickType('holiday')"><div class="nm">法定节假日休息</div><div class="ds">享底薪·计8小时</div></button>
+            <button type="button" class="typeItem" data-t="rest" onclick="window.pickType('rest')"><div class="nm">普通休息</div><div class="ds">无底薪·不影响全勤</div></button>
+            <button type="button" class="typeItem" data-t="absent" onclick="window.pickType('absent')"><div class="nm">缺勤</div><div class="ds">无底薪·全勤清零</div></button>
+          </div>
+        </div>
+        <div class="field" id="hoursField">
+          <label>上班工时（小时）</label>
+          <input type="number" id="pHours" min="0" max="24" step="0.5" value="8" onchange="window.punchChanged()" oninput="window.punchChanged()">
+          <div class="chips" style="margin-top:6px;" id="quickHours">
+            <button type="button" class="chip" onclick="window.setHours(8)">8</button>
+            <button type="button" class="chip" onclick="window.setHours(10)">10</button>
+            <button type="button" class="chip" onclick="window.setHours(11)">11</button>
+            <button type="button" class="chip" onclick="window.setHours(12)">12</button>
+          </div>
+        </div>
+        <div class="preview" id="pPreview" style="background:var(--soft2);border-radius:12px;padding:9px 11px;font-size:13px;color:var(--ink2);margin-bottom:12px;"></div>
+        <div class="field">
+          <label>备注（可选）</label>
+          <input type="text" id="pNote" maxlength="60" placeholder="例如：加班赶项目">
+        </div>
+        <button type="button" class="btn main block" id="savePunchBtn" onclick="window.savePunch()">保存打卡</button>
+      </div>
+
+      <div class="card pad">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px;">自动补卡</div>
+        <div style="font-size:12px;color:var(--ink3);margin-bottom:10px;">默认工时 <span id="autoHrInfo">11</span> 小时（8正常 + 3平日加班），跳过周末、法定节假日和已有记录的日期，点击直接执行、无需确认。</div>
+        <button type="button" class="btn soft block" style="margin-bottom:8px;" onclick="window.backfillToday()">① 补卡到今天</button>
+        <button type="button" class="btn soft block" onclick="window.backfillAll()">② 本月全部补卡</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 记录管理 ==================== -->
+  <section id="page-records" class="page">
+    <header class="topbar">
+      <button type="button" class="btnText" onclick="window.showHome()">‹ 首页</button>
+      <div class="title">打卡记录</div>
+      <span style="width:52px;"></span>
+    </header>
+    <div class="scroll">
+      <div class="monthBar">
+        <button type="button" class="mIcon" onclick="window.recShiftMonth(-1)">‹</button>
+        <div class="ym" id="recMonthLabel">----</div>
+        <button type="button" class="mIcon" onclick="window.recShiftMonth(1)">›</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:2px 2px;">
+        <span class="hint" id="recSummary"></span>
+      </div>
+
+      <div class="toolWrap" style="margin:6px 0 2px;">
+        <button type="button" class="chip" onclick="window.exportRecs('month')">导出本月</button>
+        <button type="button" class="chip" onclick="window.exportRecs('all')">导出全部</button>
+        <button type="button" class="chip" onclick="window.pickImport('append')">导入·追加</button>
+        <button type="button" class="chip" onclick="window.pickImport('overwrite')">导入·覆盖</button>
+        <button type="button" class="chip" onclick="window.askDeleteAllRecords()">删除全部</button>
+      </div>
+
+      <div id="recList"></div>
+      <input type="file" id="importFile" accept=".txt,.csv,text/plain" style="display:none;" onchange="window.onImportFile(event)">
+    </div>
+  </section>
+
+  <!-- ==================== 设置 ==================== -->
+  <section id="page-settings" class="page">
+    <header class="topbar">
+      <button type="button" class="btnText" onclick="window.showHome()">‹ 首页</button>
+      <div class="title">设置</div>
+      <span style="width:52px;"></span>
+    </header>
+    <div class="scroll">
+      <div class="card pad">
+        <div style="font-weight:700;font-size:15px;margin-bottom:8px;">主题颜色</div>
+        <div class="dots" id="themeDots"></div>
+      </div>
+
+      <div class="card pad">
+        <button type="button" class="accHead on" data-g="g1" onclick="window.toggleAcc(this)">基础参数<span class="chev">▶</span></button>
+        <div class="accBody on" id="acc-g1">
+          <div class="field"><label>底薪（元）</label><input type="number" id="sBase" step="10"><div class="unit" id="uBase"></div></div>
+          <div class="field"><label>每月标准工时（小时）</label>
+            <input type="number" id="sStd" step="1">
+            <div style="margin-top:8px;">
+              <button type="button" class="btn soft mini" id="netBtn" onclick="window.netUpdateStd()">🌐 联网更新（当月工作日 × 8）</button>
+            </div>
+            <div class="unit" id="uStd"></div>
+          </div>
+          <div class="field"><label>自动补卡默认工时（小时）</label><input type="number" id="sAuto" step="0.5" min="1"><div class="unit" id="uAuto"></div></div>
+          <div class="field"><label>每日餐补（元/天）</label><input type="number" id="sMeal" step="1"></div>
+          <div class="field"><label>每月餐补上限（元）</label><input type="number" id="sMealCap" step="10"></div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <button type="button" class="accHead on" data-g="g2" onclick="window.toggleAcc(this)">加班时薪倍数<span class="chev">▶</span></button>
+        <div class="accBody on" id="acc-g2">
+          <div class="field"><label>平日加班（倍）</label><input type="number" id="sOT1" step="0.1" min="1"></div>
+          <div class="field"><label>周末加班（倍）</label><input type="number" id="sOT2" step="0.1" min="1"></div>
+          <div class="field"><label>法定节假日加班（倍）</label><input type="number" id="sOT3" step="0.1" min="1"></div>
+          <div class="unit" style="margin-top:-4px;">时薪 = 底薪 ÷ 每月标准工时；加班按对应倍数计算。</div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <button type="button" class="accHead on" data-g="g3" onclick="window.toggleAcc(this)">补贴与奖金<span class="chev">▶</span></button>
+        <div class="accBody on" id="acc-g3">
+          <div class="field"><label>岗位补贴（元）</label><input type="number" id="sPost" step="10"></div>
+          <div class="field"><label>绩效奖金（元）</label><input type="number" id="sPerf" step="10"></div>
+          <div class="field"><label>全勤奖（元）</label><input type="number" id="sFull" step="10"></div>
+          <div class="field"><label>每月社保扣除（元）</label><input type="number" id="sSocial" step="10"></div>
+        </div>
+      </div>
+
+      <button type="button" class="btn main block" style="margin:6px 0 20px;" onclick="window.saveSettings()">保存设置</button>
+      <div style="height:14px;"></div>
+      <button type="button" class="btn ghost block" style="margin-bottom:10px;" onclick="window.askResetSettings()">恢复默认参数</button>
+      <button type="button" class="btn ghost block" onclick="window.showHolidays()">📅 法定节假日管理</button>
+    </div>
+  </section>
+
+  <!-- ==================== 法定节假日管理 ==================== -->
+  <section id="page-holidays" class="page">
+    <header class="topbar">
+      <button type="button" class="btnText" onclick="window.showPage('settings')">‹ 返回设置</button>
+      <div class="title">法定节假日管理</div>
+      <span style="width:60px;"></span>
+    </header>
+    <div class="scroll">
+      <div class="card pad">
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px;">新增自定义节假日</div>
+        <div style="font-size:12px;color:var(--ink3);margin-bottom:10px;">新增后打卡识别与工资计算立即生效。内置 2024–2026 节假日不可删除。</div>
+        <div style="display:flex;">
+          <input type="date" id="holiDate" style="flex:1.4;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;margin-right:8px;-webkit-appearance:none;">
+          <input type="text" id="holiName" placeholder="名称" maxlength="12" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;margin-right:8px;">
+          <button type="button" class="btn main mini" style="align-self:stretch;" onclick="window.addHoliday()">添加</button>
+        </div>
+      </div>
+      <div id="holiCustomWrap"></div>
+      <div id="holiBuiltinWrap"></div>
+    </div>
+  </section>
+
+  <!-- ==================== 说明 ==================== -->
+  <section id="page-help" class="page">
+    <header class="topbar">
+      <button type="button" class="btnText" onclick="window.showHome()">‹ 返回</button>
+      <div class="title">软件说明</div>
+      <span style="width:52px;"></span>
+    </header>
+    <div class="scroll">
+      <div class="card pad helpSec">
+        <h3>📌 功能简介</h3>
+        <p>打卡工资计算器：支持上班打卡、法定节假日休息、普通休息、缺勤四种记录；自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 节假日加班；按设定参数自动计算当月工资。所有数据保存在本机浏览器存储中，无需服务器。</p>
+      </div>
+      <div class="card pad helpSec">
+        <h3>🕐 工时判定规则</h3>
+        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>。<br>
+        2. 周六、周日上班：全部工时计为<b>周末加班</b>，不计正常出勤。<br>
+        3. 法定节假日上班：全部工时计为<b>节假日加班</b>，不计正常出勤。<br>
+        4. 法定节假日休息：视为出勤，按 8 小时计入有效出勤工时，享有底薪；普通休息无底薪、不影响全勤；缺勤则当月全勤清零。</p>
+        <p>自动补卡只填充工作日；周末、法定节假日、已有记录的日期自动跳过。内置 2024–2026 国务院放假安排（含调休上班日），可与「设置 → 联网更新」交叉校验每月工作日。</p>
+      </div>
+      <div class="card pad helpSec">
+        <h3>🧮 工资计算公式</h3>
+        <p>当月总收入 = 底薪 + 岗位补贴 + 绩效奖金 + 全勤奖 + 加班工资 + 餐补 − 社保扣除</p>
+        <p><b>有效出勤工时</b> = 正常出勤工时 + 法定节假日休息天数 × 8</p>
+        <p><b>出勤比例</b> = min(有效出勤工时 ÷ 每月标准工时, 1)</p>
+        <p>底薪 / 岗位补贴 / 绩效奖金 均乘以出勤比例；缺勤则全勤奖为 0，否则全额发放。</p>
+        <p><b>时薪</b> = 底薪 ÷ 每月标准工时<br>
+        <b>加班工资</b> = 平日加班 × 时薪×平日倍数 + 周末加班 × 时薪×周末倍数 + 节假日加班 × 时薪×节假日倍数</p>
+        <p><b>餐补</b> = min(上班打卡天数 × 每日餐补, 餐补上限)；社保为固定扣除。</p>
+      </div>
+      <div class="card pad helpSec">
+        <h3>⚙️ 默认参数一览</h3>
+        <p>底薪 2520 元 · 平日加班 1.5 倍 · 周末加班 2 倍 · 法定节假日 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 每月标准工时 174 小时 · 自动补卡工时 11 小时。</p>
+      </div>
+      <div class="card pad helpSec">
+        <h3>📋 记录导出格式</h3>
+        <div class="fx">日期|类型|上班工时|正常工时|平日加班|周末加班|节假日加班|是否节假日|是否周末|备注</div>
+        <p style="margin-top:6px;">类型：work=上班打卡，holiday=法定节假日休息，rest=普通休息，absent=缺勤。支持追加 / 覆盖两种导入模式。</p>
+      </div>
+      <div class="card pad helpSec">
+        <h3>🔒 数据与兼容性说明</h3>
+        <p>数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。本页已按 iOS 兼容要求处理安全区、弹窗布局与事件绑定。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 底部导航 ==================== -->
+  <nav class="bottomNav" id="bottomNav">
+    <button type="button" class="navItem" data-p="punch" onclick="window.navTo('punch')"><span class="ic">⏰</span>打卡</button>
+    <button type="button" class="navItem" data-p="home" onclick="window.navTo('home')"><span class="ic">🏠</span>首页</button>
+    <button type="button" class="navItem" data-p="records" onclick="window.navTo('records')"><span class="ic">📒</span>记录</button>
+    <button type="button" class="navItem" data-p="settings" onclick="window.navTo('settings')"><span class="ic">⚙️</span>设置</button>
+  </nav>
+
+  <!-- ==================== 通用确认弹窗 ==================== -->
+  <div class="overlay" id="ovConfirm">
+    <div class="backdrop" onclick="window.doConfirmCancel()"></div>
+    <div class="sheet">
+      <div class="sheetHead" id="cTitle">确认</div>
+      <div class="sheetBody"><div class="alert" id="cMsg"></div></div>
+      <div class="sheetFoot">
+        <button type="button" class="btn ghost" onclick="window.doConfirmCancel()">取消</button>
+        <button type="button" class="btn main" id="cOk" onclick="window.doConfirmOK()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 导出弹窗 ==================== -->
+  <div class="overlay" id="ovExport">
+    <div class="backdrop" onclick="window.closeExport()"></div>
+    <div class="sheet">
+      <div class="sheetHead">导出记录<span class="hint" id="expHint"></span></div>
+      <div class="sheetBody">
+        <textarea class="read" id="expText" readonly onclick="window.selectExp()"></textarea>
+        <div class="spacer"></div>
+        <div class="hint">可直接复制，或用下方按钮保存为 .txt 文件 / 系统分享。</div>
+      </div>
+      <div class="sheetFoot">
+        <button type="button" class="btn ghost" onclick="window.closeExport()">关闭</button>
+        <button type="button" class="btn soft" onclick="window.copyExport()">复制全部</button>
+        <button type="button" class="btn main" onclick="window.saveExportFile()">保存文件</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toasts"></div>
+
+<script id="appJS">
+/* =====================================================================
+ * 打卡工资计算器 - 单文件应用
+ * 兼容要点（历史真机踩坑）：
+ *  1) 动态 DOM 不使用 JS 绑定 .onclick；一律用 HTML 内联 onclick 调 window 全局函数，
+ *     动态生成的行内按钮也全部使用内联 onclick="window.xxx(...)"。
+ *  2) 弹窗确认不使用闭包回调：确认前把 {动作函数名, 参数} 存入全局变量，
+ *     底部"确定"按钮执行 window.doConfirmOK()，读取全局再调用。
+ *  3) 弹窗头部固定、内容独立滚动、按钮固定底部；不使用 CSS inset。
+ *  4) 补卡功能无确认弹窗，点击直接执行 + toast 反馈。
+ *  5) 所有业务逻辑外层 try/catch + toast。
+ * ===================================================================*/
+'use strict';
+
+/* ---------------- 常量与默认参数 ---------------- */
+var LS_REC  = 'punchSalaryRecords_v1';
+var LS_SET  = 'punchSalarySettings_v1';
+var LS_CUS  = 'punchSalaryCustomHolidays_v1';
+var LS_THEME= 'punchSalaryTheme_v1';
+var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
+
+var DEFAULTS = {
+  base:2520, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
+  meal:15, mealCap:360, std:174, auto:11
+};
+
+var TYPE_META = {
+  work:    {t:'上班打卡', short:'上班', badge:'work'},
+  holiday: {t:'法定节假日休息', short:'法定休', badge:'holiday_rest'},
+  rest:    {t:'普通休息', short:'休息', badge:'rest'},
+  absent:  {t:'缺勤', short:'缺勤', badge:'absent'}
+};
+
+var THEMES = {
+  pink:   {main:'#FF80AB', deep:'#e0608a', soft:'#FFF0F4', soft2:'#fff7fa', line:'#ffe2ea', chip:'#ffe4ee', chipInk:'#e0608a'},
+  mint:   {main:'#81C784', deep:'#5ca86a', soft:'#EEF7EE', soft2:'#f7fbf6', line:'#ddeddc', chip:'#e0f1e0', chipInk:'#4c8f58'},
+  sky:    {main:'#64B5F6', deep:'#3d8fd6', soft:'#EAF3FC', soft2:'#f5faff', line:'#d8e9fb', chip:'#dcecfa', chipInk:'#2f78bd'},
+  orange: {main:'#FFB74D', deep:'#ee9426', soft:'#FFF4E6', soft2:'#fffaf2', line:'#f6e3c4', chip:'#fbe9cf', chipInk:'#d97b14'},
+  purple: {main:'#BA68C8', deep:'#9743a6', soft:'#F7EEF9', soft2:'#fcf7fd', line:'#ecddf0', chip:'#f0e1f3', chipInk:'#8c3d9b'}
+};
+
+/* 内置法定节假日：off=放假日期(官方安排整段)，makeup=调休补班日期(周末上班)
+ * 数据来源：国务院办公厅 2024 / 2025 / 2026 部分节假日安排。 */
+var HOLI_OFF = {
+  '2024':{
+    '01-01':'元旦','02-10':'春节','02-11':'春节','02-12':'春节','02-13':'春节','02-14':'春节','02-15':'春节','02-16':'春节','02-17':'春节',
+    '04-04':'清明节','04-05':'清明节','04-06':'清明节',
+    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
+    '06-08':'端午节','06-09':'端午节','06-10':'端午节',
+    '09-15':'中秋节','09-16':'中秋节','09-17':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
+  },
+  '2025':{
+    '01-01':'元旦',
+    '01-28':'春节','01-29':'春节','01-30':'春节','01-31':'春节','02-01':'春节','02-02':'春节','02-03':'春节','02-04':'春节',
+    '04-04':'清明节','04-05':'清明节','04-06':'清明节',
+    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
+    '05-31':'端午节','06-01':'端午节','06-02':'端午节',
+    '10-01':'国庆节·中秋节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'中秋节','10-07':'国庆节','10-08':'国庆节'
+  },
+  '2026':{
+    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
+    '02-15':'春节','02-16':'春节','02-17':'春节','02-18':'春节','02-19':'春节','02-20':'春节','02-21':'春节','02-22':'春节','02-23':'春节',
+    '04-04':'清明节','04-05':'清明节','04-06':'清明节',
+    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
+    '06-19':'端午节','06-20':'端午节','06-21':'端午节',
+    '09-25':'中秋节','09-26':'中秋节','09-27':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
+  }
+};
+var MAKEUP = {
+  '2024':['02-04','02-18','04-07','04-28','05-11','09-14','09-29','10-12'],
+  '2025':['01-26','02-08','04-27','09-28','10-11'],
+  '2026':['01-04','02-14','02-28','05-09','09-20','10-10']
+};
+
+/* ---------------- 存储（含无 localStorage 时的内存兜底） ---------------- */
+var _mem = {};
+function storeGet(k, d){
+  try{
+    var s = window.localStorage.getItem(k);
+    if (s === null || s === undefined) return d;
+    return JSON.parse(s);
+  }catch(e){
+    return (k in _mem) ? _mem[k] : d;
+  }
+}
+function storeSet(k, v){
+  _mem[k] = v;
+  try{ window.localStorage.setItem(k, JSON.stringify(v)); }catch(e){}
+}
+function getRecs(){ var a = storeGet(LS_REC, []); return Array.isArray(a) ? a : []; }
+function setRecs(a){ storeSet(LS_REC, a); }
+function getSet(){ var s = storeGet(LS_SET, null); if (!s) return clone(DEFAULTS); var o = clone(DEFAULTS); for (var k in s){ if (o.hasOwnProperty(k) && isFinite(parseFloat(s[k]))) o[k] = parseFloat(s[k]); } return o; }
+function setSet(s){ storeSet(LS_SET, s); }
+function getCustom(){ var c = storeGet(LS_CUS, []); return Array.isArray(c) ? c : []; }
+function setCustom(c){ storeSet(LS_CUS, c); }
+function getStdMap(){ var m = storeGet(LS_STD, {}); return m && typeof m === 'object' ? m : {}; }
+function setStdMap(m){ storeSet(LS_STD, m); }
+function getThemeKey(){ var t = storeGet(LS_THEME, 'pink'); return THEMES[t] ? t : 'pink'; }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+/* ---------------- 工具 ---------------- */
+function $(id){ return document.getElementById(id); }
+function esc(s){ s = String(s === undefined || s === null ? '' : s);
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function fmtMoney(v){ v = isFinite(v) ? v : 0; return '¥' + (Math.round(v*100)/100).toFixed(2); }
+function fmtH(v){ v = isFinite(v) ? v : 0; return (Math.round(v*10)/10).toFixed(1); }
+function pad2(n){ return (n<10?'0':'') + n; }
+function todayStr(){ var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()); }
+function lastDay(y, m){ return new Date(y, m, 0).getDate(); }
+function weekdayCn(dateStr){
+  var p = dateStr.split('-'); var d = new Date(+p[0], +p[1]-1, +p[2]);
+  return ['日','一','二','三','四','五','六'][d.getDay()];
+}
+function isWeekend(dateStr){
+  var p = dateStr.split('-'); var d = new Date(+p[0], +p[1]-1, +p[2]).getDay();
+  return (d === 0 || d === 6);
+}
+function monthDays(y, m){ return new Date(y, m, 0).getDate(); }
+
+/* 日期归类：holiday 法定节假日 / weekend 周末 / workday 工作日(含调休上班日) */
+function classify(dateStr){
+  var p = dateStr.split('-'), y = p[0], md = p[1] + '-' + p[2];
+  var off = HOLI_OFF[y] || {};
+  var cust = null;
+  var cs = getCustom();
+  for (var i = 0; i < cs.length; i++){ if (cs[i].date === dateStr){ cust = cs[i]; break; } }
+  if (off[md] || cust){
+    return {type:'holiday', name: (cust ? cust.name : (off[md] || '法定节假日'))};
+  }
+  var mk = MAKEUP[y] || [];
+  if (mk.indexOf(md) >= 0) return {type:'workday', name:''};
+  if (isWeekend(dateStr)) return {type:'weekend', name:''};
+  return {type:'workday', name:''};
+}
+function isHoliDate(dateStr){ return classify(dateStr).type === 'holiday'; }
+function isHoliOff(dateStr){
+  var p = dateStr.split('-'); var off = HOLI_OFF[p[0]] || {}; return !!off[p[1]+'-'+p[2]];
+}
+
+/* 工时拆分 */
+function splitHours(dateStr, type, hours){
+  var n=0, d=0, w=0, h=0;
+  hours = isFinite(hours) ? +hours : 0;
+  if (type === 'work' && hours > 0){
+    var c = classify(dateStr).type;
+    if (c === 'holiday'){ h = hours; }
+    else if (c === 'weekend'){ w = hours; }
+    else { n = Math.min(hours, 8); d = Math.max(0, hours - 8); }
+  }
+  return {n:r1(n), d:r1(d), w:r1(w), h:r1(h)};
+}
+function r1(v){ return Math.round(v*10)/10; }
+function r2(v){ return Math.round(v*100)/100; }
+
+/* ---------------- 页面切换 ---------------- */
+var _curPage = 'home';
+var _curYM = '';
+function initYM(){ var d = new Date(); _curYM = d.getFullYear() + '-' + pad2(d.getMonth()+1); }
+function ymParts(ym){ var p = String(ym).split('-'); return {y:+p[0], m:+p[1]}; }
+function ymLabel(ym){ var p = ymParts(ym); return p.y + '年' + p.m + '月'; }
+function ymNow(){ var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth()+1); }
+
+function showPage(name){
+  /* 离开打卡页即取消未完成的“编辑”状态，避免残留到下次进入 */
+  if (name !== 'punch' && _editDate){ _editDate = ''; _manualType = false; }
+  var pages = ['home','punch','records','settings','holidays','help'];
+  for (var i=0;i<pages.length;i++){
+    var el = $('page-' + pages[i]);
+    if (el) el.className = 'page' + (pages[i]===name ? ' on' : '');
+  }
+  var navPages = ['home','punch','records','settings'];
+  var nav = $('bottomNav');
+  if (nav) nav.style.display = (navPages.indexOf(name) >= 0) ? 'flex' : 'none';
+  _curPage = name;
+  if (name==='home'){ refreshHome(); }
+  if (name==='records'){ refreshRecords(); }
+  if (name==='settings'){ renderSettings(); }
+  if (name==='holidays'){ renderHolidays(); }
+  syncNav();
+}
+function syncNav(){
+  var navPages = ['home','punch','records','settings'];
+  var items = document.querySelectorAll('#bottomNav .navItem');
+  for (var i=0;i<items.length;i++){
+    var on = items[i].getAttribute('data-p') === _curPage;
+    items[i].className = 'navItem' + (on ? ' on' : '');
+  }
+  var rc = $('recCountTop'); if (rc) rc.textContent = getRecs().length;
+}
+function navTo(p){
+  if (p === 'punch'){
+    if (_editDate){ /* 已在编辑中则保留 */ } else { resetPunchForm(); }
+  }
+  showPage(p);
+}
+function showHome(){ navTo('home'); }
+function showPunch(){ navTo('punch'); }
+function showRecords(){ navTo('records'); }
+function showSettings(){ navTo('settings'); }
+function showHelp(){ showPage('help'); }
+function showHolidays(){ showPage('holidays'); }
+
+/* ---------------- Toast ---------------- */
+function toast(msg, kind){
+  try{
+    var wrap = $('toasts');
+    var t = document.createElement('div');
+    t.className = 'toast' + (kind ? ' ' + kind : '');
+    t.textContent = msg;
+    wrap.appendChild(t);
+    setTimeout(function(){
+      if (t.parentNode) t.parentNode.removeChild(t);
+    }, kind==='good'||kind==='bad' ? 3400 : 2600);
+  }catch(e){}
+}
+
+/* ---------------- 主题 ---------------- */
+function applyTheme(key){
+  var t = THEMES[key] || THEMES.pink;
+  var root = document.documentElement.style;
+  root.setProperty('--main', t.main);
+  root.setProperty('--main-deep', t.deep);
+  root.setProperty('--soft', t.soft);
+  root.setProperty('--soft2', t.soft2);
+  root.setProperty('--line', t.line);
+  root.setProperty('--chip', t.chip);
+  root.setProperty('--chipInk', t.chipInk);
+  var mt = $('metaTheme'); if (mt) mt.setAttribute('content', t.main);
+  storeSet(LS_THEME, key);
+}
+function setTheme(key){
+  try{
+    applyTheme(key);
+    renderThemeDots();
+    toast('已切换主题');
+  }catch(e){ toast('主题切换失败', 'bad'); }
+}
+function renderThemeDots(){
+  var w = $('themeDots'); if (!w) return;
+  var cur = getThemeKey();
+  var html = '';
+  for (var k in THEMES){
+    html += '<button type="button" class="dot' + (k===cur?' on':'') + '" style="background:' + THEMES[k].main + ';" onclick="window.setTheme(\'' + k + '\')" aria-label="' + k + '"></button>';
+  }
+  w.innerHTML = html;
+}
+
+/* ---------------- 公告栏（QQ 昵称+个性签名跑马灯） ---------------- */
+function bannerText(){
+  return '🎉 欢迎使用打卡工资计算器 · 每日打卡，工资算得清清楚楚';
+}
+function setBanner(text){
+  var d = $('bannerDup');
+  if (!d) return;
+  d.innerHTML = '<b>' + esc(text) + '</b><b>' + esc(text) + '</b>';
+}
+function loadBanner(){
+  setBanner(bannerText());
+  try{
+    var ctl = new AbortController();
+    var timer = setTimeout(function(){ try{ctl.abort();}catch(e){} }, 8000);
+    fetch('https://uapis.cn/api/v1/social/qq/userinfo?qq=3126473', {signal:ctl.signal})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        clearTimeout(timer);
+        var nick = j.nick || j.nickname || j.name || '';
+        var sign = j.sign || j.signature || j.long_nick || j.qmd || j.motto || '';
+        var t;
+        if (nick){
+          t = '🐧 ' + nick + (sign ? ' · ' + sign : ' · 今天也要元气满满地打卡') ;
+        } else {
+          t = bannerText();
+        }
+        setBanner(t);
+      })
+      .catch(function(){ clearTimeout(timer); /* 保持欢迎语 */ });
+  }catch(e){}
+}
+
+/* ---------------- 首页：月统计 + 工资 ---------------- */
+function stdHoursForMonth(ym){
+  var map = getStdMap();
+  if (map[ym]) return map[ym];
+  var s = getSet();
+  return (s.std > 0) ? s.std : 174;
+}
+function offlineWorkdays(ym){
+  var p = ymParts(ym); var n = 0;
+  var total = monthDays(p.y, p.m);
+  for (var day=1; day<=total; day++){
+    var ds = ym + '-' + pad2(day);
+    if (classify(ds).type === 'workday') n++;
+  }
+  return n;
+}
+function calcMonth(ym){
+  var S = getSet();
+  var recs = getRecs();
+  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, mealDays:0, absent:0, workRecords:0};
+  var hasAbsent = false;
+  for (var i=0;i<recs.length;i++){
+    var r = recs[i];
+    if (!r || r.date.indexOf(ym) !== 0) continue;
+    if (r.type === 'work'){ sum.normal += (+r.n||0); sum.wd += (+r.d||0); sum.we += (+r.w||0); sum.hol += (+r.h||0); sum.mealDays++; sum.workRecords++; }
+    else if (r.type === 'holiday'){ sum.legalRest++; }
+    else if (r.type === 'absent'){ sum.absent++; hasAbsent = true; }
+  }
+  sum.effHours = sum.normal + sum.legalRest * 8;
+  var std = stdHoursForMonth(ym);
+  var ratio = (std > 0) ? Math.min(sum.effHours / std, 1) : (sum.effHours > 0 ? 1 : 0);
+  var hourly = (std > 0) ? S.base / std : S.base / 174;
+
+  var m = {};
+  m.base = S.base * ratio;
+  m.post = S.post * ratio;
+  m.perf = S.perf * ratio;
+  m.full = hasAbsent ? 0 : S.full;
+  m.otMoney = sum.wd * hourly * S.ot1 + sum.we * hourly * S.ot2 + sum.hol * hourly * S.ot3;
+  m.meal = Math.min(sum.mealDays * S.meal, S.mealCap);
+  m.social = S.social;
+  m.total = m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social;
+  m.ratio = ratio;
+  m.std = std;
+  m.hourly = hourly;
+  m.sum = sum;
+  m.recCount = 0;
+  for (var j=0;j<recs.length;j++){ if (recs[j].date.indexOf(ym) === 0) m.recCount++; }
+  return m;
+}
+
+function rowHtml(k, v, extraCls){
+  return '<div><span class="k">' + k + '</span><span class="v' + (extraCls ? ' ' + extraCls : '') + '">' + v + '</span></div>';
+}
+function refreshHome(){
+  try{
+    if (!$('monthLabel')) return;
+    $('monthLabel').textContent = ymLabel(_curYM);
+    var m = calcMonth(_curYM);
+    var S = getSet();
+    var su = m.sum;
+    var dayNoun = '（本月尚未打卡，可用「补卡」快速补齐）';
+    if (su.workRecords + su.legalRest + su.absent > 0){
+      dayNoun = '上班 ' + su.workRecords + ' 天 · 法定休息 ' + su.legalRest + ' 天 · 缺勤 ' + su.absent + ' 天';
+    }
+    $('totalLbl').textContent = ymLabel(_curYM) + ' 总收入';
+    if (m.recCount === 0){
+      $('totalMoney').innerHTML = '<small>¥</small>0.00';
+      $('totalMeta').textContent = '本月暂无记录 · 打卡/补卡后自动计算';
+    } else {
+      $('totalMoney').innerHTML = '<small>¥</small>' + (Math.round(m.total*100)/100).toFixed(2);
+      $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h / 标准 ' + m.std + 'h';
+    }
+
+    var otH = su.wd + su.we + su.hol;
+    var inc = '';
+    inc += rowHtml('底薪（出勤比例 ' + Math.round(m.ratio*100) + '%）', fmtMoney(m.base));
+    inc += rowHtml('岗位补贴', fmtMoney(m.post));
+    inc += rowHtml('绩效奖金', fmtMoney(m.perf));
+    inc += rowHtml('全勤奖' + (su.absent>0 ? '（有缺勤→0）' : ''), fmtMoney(m.full), su.absent>0?'':'green');
+    inc += rowHtml('加班工资', fmtMoney(m.otMoney));
+    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h', fmtMoney(su.wd*m.hourly*S.ot1), 'muted');
+    inc += rowHtml('　· 周末加班 ' + fmtH(su.we) + 'h', fmtMoney(su.we*m.hourly*S.ot2), 'muted');
+    inc += rowHtml('　· 节假日加班 ' + fmtH(su.hol) + 'h', fmtMoney(su.hol*m.hourly*S.ot3), 'muted');
+    inc += rowHtml('餐补（' + su.mealDays + '天 × ' + S.meal + '，上限' + S.mealCap + '）', fmtMoney(m.meal));
+    inc += rowHtml('社保扣除', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
+    inc += rowHtml('当月总收入', fmtMoney(m.total), 'green');
+    $('incomeRows').innerHTML = inc;
+    var ih = '';
+    if (su.effHours === 0) ih = '无出勤工时 → 底薪类按 0 计算（法定休息或上班后会自动变化）。';
+    else if (m.ratio >= 1) ih = '出勤达到标准，底薪类全额发放。';
+    else ih = '有效出勤未满标准 ' + m.std + 'h，底薪/补贴/绩效按 ' + Math.round(m.ratio*100) + '% 发放。';
+    $('incomeHint').textContent = ih;
+
+    var hs = '';
+    hs += rowHtml('标准工时（联网可调）', fmtH(m.std) + ' h');
+    hs += rowHtml('实际出勤工时（正常出勤）', fmtH(su.normal) + ' h');
+    hs += rowHtml('法定休息折算（' + su.legalRest + '天×8h）', fmtH(su.legalRest*8) + ' h');
+    hs += rowHtml('有效出勤工时', fmtH(su.effHours) + ' h');
+    hs += rowHtml('平日加班', fmtH(su.wd) + ' h');
+    hs += rowHtml('周末加班', fmtH(su.we) + ' h');
+    hs += rowHtml('节假日加班', fmtH(su.hol) + ' h');
+    hs += rowHtml('加班总工时', fmtH(otH) + ' h');
+    hs += rowHtml('上班天数', su.workRecords + ' 天');
+    hs += rowHtml('缺勤天数', su.absent + ' 天');
+    $('hoursRows').innerHTML = hs;
+    var hh = '按「工作日8h内正常/超出平日加班，周末2倍，节假日3倍」拆分；'
+      + (offlineWorkdays(_curYM) > 0 ? '本月工作日(内置含调休)约 ' + offlineWorkdays(_curYM) + ' 天。' : '');
+    $('hoursHint').textContent = hh;
+
+    var qi = $('quickInfo');
+    if (su.workRecords + su.legalRest + su.absent === 0){
+      qi.style.display = 'block';
+      $('quickInfoText').innerHTML = '📌 本月还没有记录。点下方「打卡」手动录入，或在打卡页用<b>「补卡到今天 / 本月全部补卡」</b>一键补齐工作日。';
+    } else qi.style.display = 'none';
+    $('recCountTop').textContent = getRecs().length;
+  }catch(e){
+    toast('首页刷新失败：' + (e && e.message ? e.message : e), 'bad');
+  }
+}
+function toggleCard(btn){
+  try{
+    var card = btn.parentNode;
+    card.className = card.className.indexOf('open') >= 0 ? 'card collapsed' : 'card open';
+  }catch(e){}
+}
+function toggleAcc(btn){
+  try{
+    var g = btn.getAttribute('data-g');
+    var body = $('acc-' + g);
+    if (!body) return;
+    var on = body.className.indexOf('on') >= 0;
+    if (on){ body.className = body.className.replace(/ on/g,''); btn.className = btn.className.replace(/ on/g,''); }
+    else { body.className += ' on'; btn.className += ' on'; }
+  }catch(e){}
+}
+
+/* ---------------- 月份切换 ---------------- */
+function shiftMonth(delta){
+  var p = ymParts(_curYM);
+  var nd = new Date(p.y, p.m - 1 + delta, 1);
+  _curYM = nd.getFullYear() + '-' + pad2(nd.getMonth()+1);
+  refreshHome();
+}
+function recShiftMonth(delta){
+  shiftMonth(delta);
+  refreshRecords();
+}
+
+/* ---------------- 打卡表单 ---------------- */
+var _editDate = '';   // 编辑中记录的原始日期，空 = 新建
+var _manualType = false; // 用户是否手动选定类型（手动后改日期不再自动切换）
+var _curType = 'work';
+var _pendingRec = null; // 打卡覆盖确认的草稿（普通对象，非闭包）
+
+function autoSuggestType(dateStr){
+  var c = classify(dateStr).type;
+  if (c === 'holiday') return 'holiday';
+  if (c === 'weekend') return 'rest';
+  return 'work';
+}
+function punchCatText(dateStr){
+  var c = classify(dateStr);
+  if (c.type === 'holiday') return '法定节假日 · ' + c.name;
+  if (c.type === 'weekend') return '周末';
+  return '工作日';
+}
+function resetPunchForm(){
+  _editDate = '';
+  _manualType = false;
+  var t = todayStr();
+  var dEl = $('pDate'); if (dEl) dEl.value = t;
+  $('pNote').value = '';
+  $('pHours').value = 8;
+  _curType = autoSuggestType(t);
+  pickTypeUI(_curType);
+  $('punchTitle').textContent = '上班打卡';
+  $('savePunchBtn').textContent = '保存打卡';
+  var bb = $('punchBackBtn'); if (bb) bb.textContent = '‹ 首页';
+  var ai = $('autoHrInfo'); if (ai) ai.textContent = (getSet().auto || 11);
+  punchChanged();
+}
+function editRecord(dateStr){
+  try{
+    var r = recByDate(dateStr);
+    if (!r){ toast('未找到该记录', 'bad'); return; }
+    _editDate = r.date;
+    _manualType = true;   // 编辑时保持原类型，不因日期变化自动切换
+    $('pDate').value = r.date;
+    $('pNote').value = r.note || '';
+    $('pHours').value = r.hours || (r.type==='work'?8:0);
+    _curType = r.type;
+    pickTypeUI(_curType);
+    $('punchTitle').textContent = '编辑记录';
+    $('savePunchBtn').textContent = '保存修改';
+    var bb = $('punchBackBtn'); if (bb) bb.textContent = '‹ 返回记录';
+    showPage('punch');
+    punchChanged();
+    toast('正在编辑 ' + dateStr + ' 的记录');
+  }catch(e){ toast('无法编辑：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function pickType(t){
+  _manualType = true;
+  _curType = TYPE_META[t] ? t : 'work';
+  pickTypeUI(_curType);
+  punchChanged();
+}
+function pickTypeUI(t){
+  var row = $('typeRow');
+  var btns = row.querySelectorAll('.typeItem');
+  for (var i=0;i<btns.length;i++){
+    btns[i].className = 'typeItem' + (btns[i].getAttribute('data-t')===t ? ' on' : '');
+  }
+  $('hoursField').style.display = (t==='work') ? 'block' : 'none';
+}
+function setHours(v){
+  $('pHours').value = v;
+  punchChanged();
+}
+function punchChanged(){
+  try{
+    var ds = $('pDate').value;
+    if (!ds) return;
+    var c = classify(ds);
+    $('pCat').textContent = punchCatText(ds);
+    var note = '';
+    if (c.type==='holiday') note = '当天为法定节假日：上班计 3 倍节假日加班';
+    else if (c.type==='weekend') note = '当天为周末：上班全部计周末加班（2 倍），不计正常出勤';
+    else note = '当天为工作日：8h 内正常出勤，超出部分计平日加班';
+    $('pCatNote').textContent = note;
+    /* 新建且未手动选类型时，跟随日期类别自动建议 */
+    if (!_manualType){
+      var s = autoSuggestType(ds);
+      if (s !== _curType){ _curType = s; pickTypeUI(s); }
+    }
+    var hours = parseFloat(($('pHours').value || '0').toString().replace(',', '.'));
+    var pv = $('pPreview');
+    if (_curType === 'work' && hours > 0){
+      var sp = splitHours(ds, 'work', hours);
+      var parts = [];
+      if (sp.n>0) parts.push('正常出勤 ' + fmtH(sp.n) + 'h');
+      if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（1.5倍）');
+      if (sp.w>0) parts.push('周末加班 ' + fmtH(sp.w) + 'h（2倍）');
+      if (sp.h>0) parts.push('节假日加班 ' + fmtH(sp.h) + 'h（3倍）');
+      pv.textContent = '将记入：' + (parts.length?parts.join(' + '):'0h（请确认工时）');
+    } else if (_curType === 'holiday'){
+      pv.textContent = '法定节假日休息：按 8h 计入有效出勤，享有底薪（比例按底薪折算），不影响全勤。';
+    } else if (_curType === 'rest'){
+      pv.textContent = '普通休息：无底薪、不影响全勤奖（此天不产生工时）。';
+    } else {
+      pv.textContent = '缺勤：无底薪，当月全勤奖清零。';
+    }
+  }catch(e){}
+}
+function recByDate(dateStr){
+  var recs = getRecs();
+  for (var i=0;i<recs.length;i++){ if (recs[i].date === dateStr) return recs[i]; }
+  return null;
+}
+function buildRec(ds, type, hours, note, flags){
+  var sp = splitHours(ds, type, hours);
+  var c = classify(ds);
+  return {
+    date: ds, type: type, hours: (type==='work'?hours:0),
+    n: sp.n, d: sp.d, w: sp.w, h: sp.h,
+    isHoliday: (isHoliDate(ds)?1:0), isWeekend: (isWeekend(ds)?1:0),
+    note: note || ''
+  };
+}
+function savePunch(){
+  try{
+    var ds = $('pDate').value;
+    if (!ds){ toast('请先选择日期', 'bad'); return; }
+    var hours = 0;
+    if (_curType === 'work'){
+      hours = parseFloat(($('pHours').value || '').toString().replace(',', '.'));
+      if (!isFinite(hours) || hours <= 0){ toast('请输入有效的上班工时', 'bad'); return; }
+      if (hours > 24){ hours = 24; }
+    }
+    var note = ($('pNote').value || '').trim();
+    var rec = buildRec(ds, _curType, hours, note);
+
+    var exist = recByDate(ds);
+    var overwriteConflict = false;
+    if (exist && _editDate !== ds) overwriteConflict = true;   // 新建时撞已有，或改到已有日期
+    if (!overwriteConflict){
+      doCommitPunch(rec);
+    } else {
+      var lbl = TYPE_META[exist.type] ? TYPE_META[exist.type].short : exist.type;
+      _pendingRec = rec;   // 草稿存入全局，确认按钮只触发无参回调，避免闭包丢失
+      askConfirm('已有记录', '日期 ' + ds + ' 已存在一条记录（' + lbl + '）。保存将覆盖它，确定继续吗？', 'doCommitPunchConfirmed', null);
+    }
+  }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function doCommitPunchConfirmed(){
+  try{
+    var rec = _pendingRec;
+    _pendingRec = null;
+    if (!rec){ toast('草稿已失效，请重试', 'bad'); return; }
+    doCommitPunch(rec);
+  }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function doCommitPunch(rec){
+  try{
+    var recs = getRecs();
+    var list = [];
+    var replaced = false;
+    for (var i=0;i<recs.length;i++){
+      if (recs[i].date === _editDate) continue;                 // 移除原记录（编辑改期）
+      if (recs[i].date === rec.date){ replaced = true; continue; } // 覆盖同日期
+      list.push(recs[i]);
+    }
+    list.push(rec);
+    setRecs(list);
+    var wasEdit = !!_editDate;
+    _editDate = '';
+    toast('已' + (wasEdit ? '保存修改' : '记录打卡') + '：' + rec.date + ' ' + TYPE_META[rec.type].t + (replaced?'（覆盖）':''));
+    var m = rec.date.substring(0,7);
+    if (m !== _curYM){ _curYM = m; }
+    if (wasEdit){ showPage('records'); } else { showPage('home'); }
+  }catch(e){ toast('写入失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function punchBack(){
+  if (_editDate){ _editDate=''; resetPunchForm(); showPage('records'); }
+  else showPage('home');
+}
+function cancelPunch(){ _editDate=''; resetPunchForm(); }
+
+/* ---------------- 补卡（无确认，直接执行 + toast） ---------------- */
+function backfillBase(ym, uptoToday){
+  var S = getSet();
+  var defH = (S.auto > 0) ? S.auto : 11;
+  var p = ymParts(ym);
+  var end = uptoToday ? parseInt(todayStr().split('-')[2], 10) : monthDays(p.y, p.m);
+  var today = todayStr();
+  var recs = getRecs();
+  var map = {};
+  for (var i=0;i<recs.length;i++){ map[recs[i].date] = true; }
+  var succ=0, skip=0, fail=0;
+  for (var day=1; day<=end; day++){
+    var ds = ym + '-' + pad2(day);
+    if (uptoToday && ds > today) break;
+    try{
+      var c = classify(ds);
+      if (c.type === 'holiday' || c.type === 'weekend'){ skip++; continue; }
+      if (map[ds]){ skip++; continue; }
+      var rec = buildRec(ds, 'work', defH, '自动补卡');
+      map[ds] = true;
+      recs.push(rec);
+      succ++;
+    }catch(e){ fail++; }
+  }
+  setRecs(recs);
+  if (_curYM !== ym){ _curYM = ym; }
+  toast('补卡完成：成功 ' + succ + ' 条，跳过 ' + skip + ' 条，失败 ' + fail + ' 条', succ>0?'good':'');
+  showPage('home');
+}
+function backfillToday(){
+  try{
+    var now = ymNow();
+    backfillBase(now, true);
+  }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function backfillAll(){
+  try{
+    /* “本月全部补卡”按当前自然月补齐，与按钮文案一致 */
+    var now = ymNow();
+    backfillBase(now, false);
+  }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+
+/* ---------------- 记录管理 ---------------- */
+function refreshRecords(){
+  try{
+    $('recMonthLabel').textContent = ymLabel(_curYM);
+    var recs = getRecs();
+    var month = [];
+    for (var i=0;i<recs.length;i++){ if (recs[i].date.indexOf(_curYM) === 0) month.push(recs[i]); }
+    month.sort(function(a,b){ return a.date < b.date ? 1 : -1; });
+    $('recSummary').textContent = '共 ' + month.length + ' 条 · 全部 ' + recs.length + ' 条';
+    var html = '';
+    if (!month.length){
+      html = '<div class="card pad" style="text-align:center;color:var(--ink3);font-size:13px;">本月暂无打卡记录<br>可在「打卡」页补录或使用自动补卡</div>';
+    }
+    for (var j=0;j<month.length;j++){
+      html += recRowHtml(month[j]);
+    }
+    $('recList').innerHTML = html;
+  }catch(e){ toast('记录页刷新失败', 'bad'); }
+}
+function recRowHtml(r){
+  var meta = TYPE_META[r.type] || TYPE_META.rest;
+  var d = r.date.substring(5).replace('-', '月') + '日';
+  var wd = '周' + weekdayCn(r.date);
+  var line1 = esc(d) + ' <span class="w">' + wd + '</span>';
+  var sub = '';
+  if (r.type === 'work'){
+    var parts = [];
+    parts.push('共 ' + fmtH(r.hours) + 'h');
+    if ((+r.n) > 0) parts.push('正常 ' + fmtH(r.n));
+    if ((+r.d) > 0) parts.push('平日加 ' + fmtH(r.d));
+    if ((+r.w) > 0) parts.push('周末加 ' + fmtH(r.w));
+    if ((+r.h) > 0) parts.push('节假加 ' + fmtH(r.h));
+    sub = parts.join(' · ');
+  } else if (r.type === 'holiday'){
+    sub = '法定节假日休息（计入 8h 出勤）';
+  } else if (r.type === 'rest'){
+    sub = '普通休息';
+  } else {
+    sub = '缺勤（当月全勤清零）';
+  }
+  if (r.note) sub += ' · ' + esc(r.note);
+  return '<div class="rec"><div class="top"><div class="d">' + line1 + '</div>' +
+    '<span class="badge ' + meta.badge + '">' + meta.short + '</span></div>' +
+    '<div class="sub">' + sub + '</div>' +
+    '<div class="ops">' +
+    '<button type="button" class="opBtn" onclick="window.editRecord(\'' + r.date + '\')">编辑</button>' +
+    '<button type="button" class="opBtn del" onclick="window.askDeleteRecord(\'' + r.date + '\')">删除</button>' +
+    '</div></div>';
+}
+function askDeleteRecord(dateStr){
+  askConfirm('删除记录', '确定删除 ' + dateStr + ' 的打卡记录吗？（不会影响其他数据）', 'doDeleteRecord', {date:dateStr});
+}
+function doDeleteRecord(arg){
+  try{
+    var ds = arg && arg.date;
+    var recs = [];
+    var gone = false;
+    var old = getRecs();
+    for (var i=0;i<old.length;i++){ if (old[i].date === ds){ gone = true; continue; } recs.push(old[i]); }
+    setRecs(recs);
+    toast(gone ? '已删除 ' + ds + ' 的记录' : '该记录不存在');
+    if (_curYM.indexOf(ds.substring(0,7)) !== 0) { /* 不需要切月 */ }
+    showPage('records');
+  }catch(e){ toast('删除失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function askDeleteAllRecords(){
+  var n = getRecs().length;
+  if (!n){ toast('当前没有记录可删除'); return; }
+  askConfirm('删除全部记录', '将删除全部 ' + n + ' 条打卡记录（所有月份），且不可恢复。确定继续吗？', 'doDeleteAllRecords', null);
+}
+function doDeleteAllRecords(){
+  try{
+    setRecs([]);
+    toast('已清空全部打卡记录', 'good');
+    showPage('records');
+  }catch(e){ toast('删除失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+
+/* ---------------- 导出 ---------------- */
+function exportText(ymFilter){
+  var recs = getRecs();
+  var arr = [];
+  for (var i=0;i<recs.length;i++){
+    var r = recs[i];
+    if (ymFilter && r.date.indexOf(ymFilter) !== 0) continue;
+    arr.push([r.date, r.type, fmtH(r.hours), fmtH(r.n), fmtH(r.d), fmtH(r.w), fmtH(r.h),
+              r.isHoliday, r.isWeekend, r.note||''].join('|'));
+  }
+  arr.sort();
+  return arr.join('\n');
+}
+function exportRecs(scope){
+  try{
+    var txt = exportText(scope === 'month' ? _curYM : null);
+    if (!txt){ toast('没有可导出的记录', 'bad'); return; }
+    $('expText').value = txt;
+    $('expHint').textContent = (scope==='month' ? ymLabel(_curYM) : '全部') + ' ' + txt.split('\n').length + ' 条';
+    showOverlay('ovExport');
+  }catch(e){ toast('导出失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function closeExport(){ hideOverlay('ovExport'); }
+function selectExp(){ try{ $('expText').select(); }catch(e){} }
+function copyExport(){
+  try{
+    var txt = $('expText').value;
+    copyText(txt);
+  }catch(e){ toast('复制失败', 'bad'); }
+}
+function copyText(txt){
+  var done = false;
+  function legacy(){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = txt;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast(ok ? '已复制全部记录' : '复制失败，请长按文本手动复制', ok?'good':'bad');
+    }catch(e){ toast('复制失败', 'bad'); }
+  }
+  try{
+    if (window.navigator && navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ toast('已复制全部记录', 'good'); }, function(){ legacy(); });
+    } else legacy();
+  }catch(e){ legacy(); }
+}
+function saveExportFile(){
+  try{
+    var txt = $('expText').value;
+    var blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '打卡记录_' + todayStr() + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ try{URL.revokeObjectURL(url);}catch(e){} }, 2000);
+    toast('已生成文本文件（下载/系统面板）', 'good');
+  }catch(e){ toast('保存文件失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+
+/* ---------------- 导入 ---------------- */
+var _importMode = 'append';
+function pickImport(mode){
+  _importMode = mode;
+  try{
+    var fi = $('importFile');
+    if (fi) { fi.value = ''; fi.click(); }
+  }catch(e){ toast('无法打开文件选择', 'bad'); }
+}
+function parseImportLine(line){
+  line = String(line).replace(/\r/g, '').trim();
+  if (!line) return null;
+  var f = line.split('|');
+  if (f.length < 9) return null;
+  var date = (f[0]||'').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  var t = (f[1]||'').trim().toLowerCase();
+  var typeMap = {work:'work', '上班':'work', '上班打卡':'work', 'w':'work',
+                 holiday:'holiday', 'holiday_rest':'holiday', '法定节假日休息':'holiday', '法定休':'holiday', '节假日':'holiday',
+                 rest:'rest', '普通休息':'rest', '休息':'rest', 'r':'rest',
+                 absent:'absent', '缺勤':'absent', 'a':'absent'};
+  var type = typeMap[t];
+  if (!type) return null;
+  var num = function(x, def){ var n = parseFloat(String(x).replace(',','.')); return isFinite(n) ? n : def; };
+  var hours = num(f[2], 0);
+  var n = num(f[3],0), d = num(f[4],0), w = num(f[5],0), h = num(f[6],0);
+  if (hours < 0 || n < 0 || d < 0 || w < 0 || h < 0) return null;
+  if (type === 'work' && hours <= 0){ // 上班类型必须有时长；无拆分明细则重新拆分
+    return null;
+  }
+  var isH = parseInt(f[7],10) === 1 || isHoliDate(date);
+  var isW = parseInt(f[8],10) === 1 || isWeekend(date);
+  var note = f[9] ? f[9].trim() : '';
+  var rec = {date:date, type:type, hours:hours, n:n, d:d, w:w, h:h, isHoliday:isH?1:0, isWeekend:isW?1:0, note:note};
+  /* 校验完整性：若为上班且自带拆分为 0，则用日期重算（兼容只有总工时的文本） */
+  if (type === 'work' && n + d + w + h <= 0) {
+    var sp = splitHours(date, 'work', hours);
+    rec.n = sp.n; rec.d = sp.d; rec.w = sp.w; rec.h = sp.h;
+  }
+  return rec;
+}
+function onImportFile(evt){
+  try{
+    var file = evt.target.files && evt.target.files[0];
+    if (!file) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      try{ runImport(rd.result || ''); }
+      catch(e){ toast('解析文件失败', 'bad'); }
+    };
+    rd.onerror = function(){ toast('读取文件失败', 'bad'); };
+    rd.readAsText(file, 'utf-8');
+  }catch(e){ toast('读取文件失败', 'bad'); }
+}
+function runImport(text){
+  var lines = String(text).split('\n');
+  var parsed = [], bad = 0;
+  for (var i=0;i<lines.length;i++){
+    var rec = parseImportLine(lines[i]);
+    if (rec) parsed.push(rec); else if (String(lines[i]).trim()) bad++;
+  }
+  if (_importMode === 'overwrite'){
+    askConfirm('覆盖导入', '将清空现有全部记录，再导入 ' + parsed.length + ' 条（无效 ' + bad + ' 行）。不可恢复，确定继续吗？', 'doImportOverwrite', {parsed:parsed, bad:bad});
+  } else {
+    doImportAppend(parsed, bad);
+  }
+}
+function doImportAppend(parsed, bad){
+  try{
+    var old = getRecs();
+    var map = {};
+    for (var i=0;i<old.length;i++) map[old[i].date] = true;
+    var add = 0, skip = 0;
+    var newList = old.slice();
+    for (var j=0;j<parsed.length;j++){
+      if (map[parsed[j].date]){ skip++; continue; }
+      map[parsed[j].date] = true;
+      newList.push(parsed[j]);
+      add++;
+    }
+    setRecs(newList);
+    toast('导入完成：新增 ' + add + ' 条，跳过(重复) ' + skip + ' 条，无效 ' + (bad||0) + ' 行', add>0?'good':'');
+    var first = parsed.length ? parsed[0].date.substring(0,7) : null;
+    if (first) _curYM = first;
+    showPage('records');
+  }catch(e){ toast('追加导入失败', 'bad'); }
+}
+function doImportOverwrite(arg){
+  try{
+    var parsed = (arg && arg.parsed) || [];
+    var bad = (arg && arg.bad) || 0;
+    var map = {};
+    var out = [];
+    var added = 0;
+    for (var i=0;i<parsed.length;i++){
+      if (map[parsed[i].date]) continue;
+      map[parsed[i].date] = true;
+      out.push(parsed[i]); added++;
+    }
+    setRecs(out);
+    toast('覆盖导入完成：写入 ' + added + ' 条，无效 ' + bad + ' 行', 'good');
+    var first = parsed.length ? parsed[0].date.substring(0,7) : null;
+    if (first) _curYM = first;
+    showPage('records');
+  }catch(e){ toast('覆盖导入失败', 'bad'); }
+}
+
+/* ---------------- 设置 ---------------- */
+function renderSettings(){
+  try{
+    var S = getSet();
+    $('sBase').value = S.base;
+    $('sStd').value = S.std;
+    $('sAuto').value = S.auto;
+    $('sMeal').value = S.meal;
+    $('sMealCap').value = S.mealCap;
+    $('sOT1').value = S.ot1;
+    $('sOT2').value = S.ot2;
+    $('sOT3').value = S.ot3;
+    $('sPost').value = S.post;
+    $('sPerf').value = S.perf;
+    $('sFull').value = S.full;
+    $('sSocial').value = S.social;
+    var map = getStdMap();
+    $('uBase').textContent = '加班时薪按 底薪 ÷ 标准工时 折算';
+    $('uStd').textContent = (map[_curYM] ? ('当前查看月 ' + ymLabel(_curYM) + ' 已用联网值 ' + map[_curYM] + 'h（工作日×8）· ') : '')
+      + '默认 174h；联网更新会按「当月工作日数 × 8」写入（支持调休）。';
+    $('uAuto').textContent = '补卡默认拆分：8h 正常出勤 + 其余按平日加班';
+    $('autoHrInfo').textContent = S.auto;
+    renderThemeDots();
+  }catch(e){ toast('设置页加载失败', 'bad'); }
+}
+function saveSettings(){
+  try{
+    function gv(id, dflt){ var v = parseFloat(($(id).value || '').toString().replace(',', '.')); return isFinite(v) ? v : dflt; }
+    var s = {
+      base: Math.max(0, gv('sBase', 2520)),
+      ot1:  Math.max(0, gv('sOT1', 1.5)),
+      ot2:  Math.max(0, gv('sOT2', 2)),
+      ot3:  Math.max(0, gv('sOT3', 3)),
+      social: Math.max(0, gv('sSocial', 420)),
+      full: Math.max(0, gv('sFull', 100)),
+      perf: Math.max(0, gv('sPerf', 50)),
+      post: Math.max(0, gv('sPost', 400)),
+      meal: Math.max(0, gv('sMeal', 15)),
+      mealCap: Math.max(0, gv('sMealCap', 360)),
+      std: Math.max(1, gv('sStd', 174)),
+      auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
+    };
+    setSet(s);
+    $('autoHrInfo').textContent = s.auto;
+    toast('设置已保存', 'good');
+    refreshHome();
+  }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
+}
+function askResetSettings(){
+  askConfirm('恢复默认', '确定将薪资参数全部恢复为默认值吗？（打卡记录与主题不受影响）', 'doResetSettings', null);
+}
+function doResetSettings(){
+  try{
+    setSet(clone(DEFAULTS));
+    setStdMap({});
+    renderSettings();
+    refreshHome();
+    toast('已恢复默认参数', 'good');
+  }catch(e){ toast('恢复失败', 'bad'); }
+}
+function netUpdateStd(){
+  try{
+    var btn = $('netBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+    var ym = _curYM;
+    var url = 'https://uapis.cn/api/v1/misc/holiday-calendar?month=' + ym;
+    var ctl = new AbortController();
+    var timer = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 12000);
+    fetch(url, {signal:ctl.signal})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        clearTimeout(timer);
+        var wd = null;
+        try{
+          if (j && j.summary && isFinite(+j.summary.workdays)) wd = +j.summary.workdays;
+          else if (j && j.data && j.data.summary && isFinite(+j.data.summary.workdays)) wd = +j.data.summary.workdays;
+          else if (j && j.days && Array.isArray(j.days)){
+            var c = 0;
+            for (var i=0;i<j.days.length;i++){ if (j.days[i] && j.days[i].is_workday === true) c++; }
+            if (c > 0) wd = c;
+          }
+        }catch(e){}
+        if (wd === null || wd <= 0){
+          toast('接口未返回有效工作日数，已保留原值', 'bad');
+          return;
+        }
+        var std = wd * 8;
+        var map = getStdMap();
+        map[ym] = std;
+        setStdMap(map);
+        var S = getSet(); S.std = std; setSet(S);   // 同时作为默认值
+        $('sStd').value = std;
+        $('uStd').textContent = ymLabel(ym) + '：工作日 ' + wd + ' 天 × 8 = ' + std + 'h（已写入，支持调休）';
+        toast('联网更新成功：' + ymLabel(ym) + ' 标准工时 ' + std + 'h', 'good');
+        refreshHome();
+      })
+      .catch(function(){
+        clearTimeout(timer);
+        toast('联网更新失败，已保留原数值', 'bad');
+      })
+      .finally(function(){
+        if (btn) { btn.disabled = false; btn.textContent = '🌐 联网更新（当月工作日 × 8）'; }
+      });
+  }catch(e){
+    var b2 = $('netBtn'); if (b2){ b2.disabled = false; b2.textContent = '🌐 联网更新（当月工作日 × 8）'; }
+    toast('联网更新失败，已保留原数值', 'bad');
+  }
+}
+
+/* ---------------- 法定节假日管理 ---------------- */
+function renderHolidays(){
+  try{
+    var cs = getCustom();
+    var cHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">自定义节假日（' + cs.length + '）</div>';
+    if (!cs.length){
+      cHtml += '<div class="hint" style="margin-top:6px;">暂无自定义，可添加企业/个人放假安排。</div>';
+    } else {
+      cHtml += '<div style="margin-top:6px;">';
+      for (var i=0;i<cs.length;i++){
+        cHtml += '<div class="listRow"><span style="color:var(--ink2);">' + cs[i].date + ' <b style="color:var(--ink);">' + esc(cs[i].name) + '</b></span>' +
+          '<button type="button" class="opBtn del" onclick="window.delCustomHoliday(\'' + cs[i].date + '\')">删除</button></div>';
+      }
+      cHtml += '</div>';
+    }
+    cHtml += '</div>';
+    $('holiCustomWrap').innerHTML = cHtml;
+
+    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置法定节假日（2024–2026，不可删除）</div>';
+    var years = ['2024','2025','2026'];
+    var cnt = 0;
+    for (var y=0;y<years.length;y++){
+      var off = HOLI_OFF[years[y]] || {};
+      var names = {};
+      for (var k in off){ var nm = off[k]; names[nm] = (names[nm]||0)+1; }
+      bHtml += '<div style="margin-top:8px;font-size:13px;color:var(--ink);font-weight:700;">' + years[y] + '年</div>';
+      bHtml += '<div style="font-size:12px;color:var(--ink3);margin-top:2px;">';
+      var first = true;
+      for (var nm2 in names){
+        if (!first) bHtml += '　'; first = false;
+        bHtml += esc(nm2) + '×' + names[nm2] + '天';
+        cnt += names[nm2];
+      }
+      bHtml += '</div>';
+    }
+    bHtml += '<div class="hint" style="margin-top:8px;">共收录 ' + cnt + ' 个放假日期（含调休连休日期）；周末调休补班日会计为工作日。数据源：国务院办公厅放假安排。</div>';
+    bHtml += '</div>';
+    $('holiBuiltinWrap').innerHTML = bHtml;
+  }catch(e){ toast('节假日管理加载失败', 'bad'); }
+}
+function addHoliday(){
+  try{
+    var date = $('holiDate').value;
+    var name = ($('holiName').value || '').trim();
+    if (!date){ toast('请选择日期', 'bad'); return; }
+    if (!name){ toast('请填写名称', 'bad'); return; }
+    if (isHoliOff(date)){ toast('该日期已是内置法定节假日，无需添加', 'bad'); return; }
+    var cs = getCustom();
+    for (var i=0;i<cs.length;i++){ if (cs[i].date === date){ toast('该日期已存在自定义节假日', 'bad'); return; } }
+    cs.push({date:date, name:name});
+    cs.sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+    setCustom(cs);
+    $('holiName').value = '';
+    renderHolidays();
+    refreshHome();
+    toast('已添加：' + date + ' ' + name + '（打卡与工资立即生效）', 'good');
+  }catch(e){ toast('添加失败', 'bad'); }
+}
+function delCustomHoliday(date){
+  try{
+    var cs = getCustom();
+    var out = [], gone = false;
+    for (var i=0;i<cs.length;i++){ if (cs[i].date === date){ gone = true; continue; } out.push(cs[i]); }
+    setCustom(out);
+    renderHolidays();
+    refreshHome();
+    toast(gone ? '已删除 ' + date + ' 的自定义节假日' : '未找到该节假日');
+  }catch(e){ toast('删除失败', 'bad'); }
+}
+
+/* ---------------- 通用确认弹窗（无闭包回调，读全局） ---------------- */
+var _pending = null;   // {fn:'全局函数名', arg:参数}
+function askConfirm(title, msg, fnName, arg){
+  try{
+    _pending = {fn: fnName, arg: (arg === undefined ? null : arg)};
+    $('cTitle').textContent = title || '确认';
+    $('cMsg').textContent = msg || '';
+    $('cOk').className = 'btn main';
+    showOverlay('ovConfirm');
+  }catch(e){}
+}
+function doConfirmOK(){
+  try{
+    var p = _pending;
+    if (!p){ hideOverlay('ovConfirm'); return; }
+    var fn = window[p.fn];
+    _pending = null;
+    try{
+      if (typeof fn === 'function') fn(p.arg);
+      else toast('操作未生效（未找到处理函数）', 'bad');
+    }catch(e){ toast('操作出错：' + (e&&e.message?e.message:e), 'bad'); }
+    hideOverlay('ovConfirm');
+  }catch(e){}
+}
+function doConfirmCancel(){
+  try{
+    _pending = null;
+    hideOverlay('ovConfirm');
+  }catch(e){}
+}
+
+/* ---------------- overlay 通用 ---------------- */
+function showOverlay(id){ var el = $(id); if (el) el.className = 'overlay on'; }
+function hideOverlay(id){ var el = $(id); if (el) el.className = 'overlay'; }
+
+/* ---------------- 全局消息拦截保护 ---------------- */
+window.addEventListener('error', function(e){
+  try{ toast('页面异常：' + (e && e.message ? e.message : '未知错误'), 'bad'); }catch(_){}
+});
+
+/* ---------------- 启动 ---------------- */
+function boot(){
+  try{
+    initYM();
+    applyTheme(getThemeKey());
+    resetPunchForm();
+    refreshHome();
+    refreshRecords();
+    loadBanner();
+  }catch(e){}
+}
+boot();
+
+/* ---------------- 显式挂到 window（WKWebView 内联 onclick 依赖） ---------------- */
+window.showHelp = showHelp;
+window.showHome = showHome;
+window.navTo = navTo;
+window.showPage = showPage;
+window.shiftMonth = shiftMonth;
+window.recShiftMonth = recShiftMonth;
+window.toggleCard = toggleCard;
+window.toggleAcc = toggleAcc;
+window.pickType = pickType;
+window.setHours = setHours;
+window.punchChanged = punchChanged;
+window.savePunch = savePunch;
+window.punchBack = punchBack;
+window.editRecord = editRecord;
+window.askDeleteRecord = askDeleteRecord;
+window.askDeleteAllRecords = askDeleteAllRecords;
+window.exportRecs = exportRecs;
+window.closeExport = closeExport;
+window.selectExp = selectExp;
+window.copyExport = copyExport;
+window.saveExportFile = saveExportFile;
+window.pickImport = pickImport;
+window.onImportFile = onImportFile;
+window.saveSettings = saveSettings;
+window.askResetSettings = askResetSettings;
+window.netUpdateStd = netUpdateStd;
+window.setTheme = setTheme;
+window.showHolidays = showHolidays;
+window.addHoliday = addHoliday;
+window.delCustomHoliday = delCustomHoliday;
+window.backfillToday = backfillToday;
+window.backfillAll = backfillAll;
+window.askConfirm = askConfirm;
+window.doConfirmOK = doConfirmOK;
+window.doConfirmCancel = doConfirmCancel;
+window.doDeleteRecord = doDeleteRecord;
+window.doDeleteAllRecords = doDeleteAllRecords;
+window.doCommitPunchConfirmed = doCommitPunchConfirmed;  // 打卡覆盖确认（读全局草稿）
+window.doImportOverwrite = doImportOverwrite;
+window.doResetSettings = doResetSettings;
+window.toast = toast;
+</script>
+</body>
+</html>

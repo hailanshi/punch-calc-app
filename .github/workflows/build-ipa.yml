@@ -1,0 +1,64 @@
+# =====================================================================
+# PunchCalc - 云端自动打包 .ipa（免费，无 Mac / 无开发者账号）
+# 原理：GitHub 提供免费的 macOS 服务器（带 Xcode），收到上传后自动：
+#   生成 Xcode 工程 -> 编译 -> 注入 index.html/图标 -> 打出 .ipa
+# 你把整个文件夹传到一个 GitHub 仓库，这个文件就会自动执行。
+# 产物在本页面右侧 "Actions" 里下载（punch-calculator.ipa）。
+# =====================================================================
+name: Build PunchCalc IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:        # 允许在网页上手动点“Run workflow”重新打包
+
+jobs:
+  build-ipa:
+    runs-on: macos-14       # 苹果自家的 macOS 云服务器
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install xcodegen (生成 Xcode 工程用的小工具)
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios-shell/PunchCalcApp
+        run: xcodegen generate
+
+      - name: Build app (arm64, iOS 12+, 不签名)
+        working-directory: ios-shell/PunchCalcApp
+        run: |
+          xcodebuild \
+            -project PunchCalc.xcodeproj \
+            -scheme PunchCalc \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Ad-hoc sign（TrollStore 兼容）
+        working-directory: ios-shell/PunchCalcApp
+        run: |
+          APP="build/Build/Products/Release-iphoneos/PunchCalc.app"
+          codesign --force --sign - "$APP" || echo "(adhoc 签名跳过，TrollStore 可自行处理)"
+
+      - name: Package IPA
+        working-directory: ios-shell/PunchCalcApp
+        run: |
+          APP="build/Build/Products/Release-iphoneos/PunchCalc.app"
+          rm -rf _payload
+          mkdir -p _payload/Payload
+          cp -R "$APP" _payload/Payload/PunchCalc.app
+          ( cd _payload && zip -qry ../../punch-calculator.ipa Payload )
+          rm -rf _payload
+          echo "IPA 已生成：$(pwd)/punch-calculator.ipa"
+
+      - name: Upload .ipa（网页 Actions 页可下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: punch-calculator-ipa
+          path: punch-calculator.ipa
+          if-no-files-found: error

@@ -1,0 +1,44 @@
+# xcodegen 配置：云端(macOS)或本机(Xcode)一键生成 PunchCalc.xcodeproj
+# 生成：xcodegen generate
+name: PunchCalc
+
+targets:
+  PunchCalc:
+    type: application
+    platform: iOS
+    deploymentTarget: "12.0"
+    sources:
+      - main.m
+      - AppDelegate.h
+      - AppDelegate.m
+      - ViewController.h
+      - ViewController.m
+    resources:
+      - Resources
+    dependencies:
+      - sdk: Foundation.framework
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
+    settings:
+      base:
+        PRODUCT_NAME: PunchCalc
+        PRODUCT_BUNDLE_IDENTIFIER: com.punchcalc.app
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        TARGETED_DEVICE_FAMILY: "1"
+        IPHONEOS_DEPLOYMENT_TARGET: "12.0"
+        ARCHS: "arm64"
+        ONLY_ACTIVE_ARCH: "NO"
+        CLANG_ENABLE_MODULES: "YES"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+
+schemes:
+  PunchCalc:
+    build:
+      targets:
+        PunchCalc: all
+    run:
+      config: Release
+    archive:
+      config: Release
