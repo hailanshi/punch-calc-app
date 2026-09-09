@@ -3,50 +3,86 @@
 
 /* =====================================================================
  * 极简 iOS 壳：只负责把本地单文件 HTML 装进 WKWebView 并加载。
- * 所有业务逻辑都在 index.html（打卡工资计算器）内，壳层不做任何业务。
- * 适配 iOS 12+ / arm64，打包后可直接用 TrollStore 巨魔商店安装。
+ * 本版加固：
+ *  1) 移除对 WKPreferences 的私有 KVC 写入（新版 iOS 可能抛异常导致启动闪退）
+ *  2) 启动与加载全用 @try/@catch 保护
+ *  3) 崩溃时把原因写入 App Documents/crash.log（可在“文件”App 里看到）
  * ===================================================================*/
 
 @interface ViewController () <WKNavigationDelegate>
 @property (nonatomic, strong) WKWebView *webView;
 @end
 
+static void _writeLogLine(NSString *line) {
+    @autoreleasepool {
+        NSURL *dirs = [[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory
+                                                              inDomains:NSUserDomainMask] firstObject];
+        if (!dirs) return;
+        NSURL *file = [dirs URLByAppendingPathComponent:@"crash.log"];
+        NSString *existing = [NSString stringWithContentsOfURL:file encoding:NSUTF8StringEncoding error:NULL];
+        NSString *stamp = [NSDateFormatter localizedStringFromDate:[NSDate date]
+                                                          dateStyle:NSDateFormatterShortStyle
+                                                          timeStyle:NSDateFormatterMediumStyle];
+        NSString *all = [NSString stringWithFormat:@"%@\n==== %@ ====\n%@\n", (existing ?: @""), stamp, line];
+        [all writeToURL:file atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+    }
+}
+
+static void _crashHandler(NSException *e) {
+    NSString *s = [NSString stringWithFormat:@"NSException: name=%@ reason=%@\nStack:\n%@",
+                   e.name, e.reason, [e.callStackSymbols componentsJoinedByString:@"\n"]];
+    _writeLogLine(s);
+}
+
+static void _signalHandler(int sig) {
+    _writeLogLine([NSString stringWithFormat:@"Signal: %d", sig]);
+    _exit(0);
+}
+
+static void _installCrashHandlers(void) {
+    NSSetUncaughtExceptionHandler(&_crashHandler);
+    signal(SIGABRT, _signalHandler);
+    signal(SIGSEGV, _signalHandler);
+    signal(SIGILL, _signalHandler);
+    signal(SIGBUS, _signalHandler);
+}
+
 @implementation ViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    @try {
+        _installCrashHandlers();
+        _writeLogLine(@"app launched, viewDidLoad reached");
 
-    WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+        WKWebViewConfiguration *config = [[WKWebViewConfiguration alloc] init];
+        /* 注意：这里不再写任何私有 KVC 键，避免系统版本差异导致异常闪退 */
 
-    /* file:// 下允许读取本地文件 / 访问本地 storage */
-    if (@available(iOS 9.0, *)) {
-        [config.preferences setValue:@YES forKey:@"allowFileAccessFromFileURLs"];
-        [config.preferences setValue:@YES forKey:@"allowUniversalAccessFromFileURLs"];
+        self.webView = [[WKWebView alloc] initWithFrame:self.view.bounds configuration:config];
+        self.webView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        self.webView.navigationDelegate = self;
+        self.webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+        self.webView.scrollView.bounces = NO;
+        self.webView.opaque = NO;
+        self.webView.backgroundColor = [UIColor colorWithRed:1.0 green:0.94 blue:0.94 alpha:1.0];
+        self.webView.scrollView.backgroundColor = self.webView.backgroundColor;
+        if (@available(iOS 13.0, *)) {
+            self.view.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            self.view.backgroundColor = [UIColor whiteColor];
+        }
+        [self.view addSubview:self.webView];
+
+        [self loadLocalHtml];
+    } @catch (NSException *e) {
+        _writeLogLine([NSString stringWithFormat:@"viewDidLoad exception: %@ %@", e.name, e.reason]);
     }
-
-    self.webView = [[WKWebView alloc] initWithFrame:self.view.bounds configuration:config];
-    self.webView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.webView.navigationDelegate = self;
-    self.webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-    self.webView.scrollView.bounces = NO;
-    self.webView.opaque = NO;
-    self.webView.backgroundColor = [UIColor colorWithRed:1.0 green:0.94 blue:0.94 alpha:1.0];
-    self.webView.scrollView.backgroundColor = self.webView.backgroundColor;
-    if (@available(iOS 13.0, *)) {
-        self.view.backgroundColor = [UIColor systemBackgroundColor];
-    } else {
-        self.view.backgroundColor = [UIColor whiteColor];
-    }
-    [self.view addSubview:self.webView];
-
-    [self loadLocalHtml];
 }
 
-/* 按可能出现的多种资源路径查找 index.html */
 - (NSString *)locateHtml {
     NSBundle *b = [NSBundle mainBundle];
     NSString *candidates[] = {
-        [b pathForResource:@"index" ofType:@"html"],                 // 打入 .app 根目录
+        [b pathForResource:@"index" ofType:@"html"],
         [[b resourcePath] stringByAppendingPathComponent:@"www/index.html"],
         [[b resourcePath] stringByAppendingPathComponent:@"Resources/index.html"],
         [b pathForResource:@"index" ofType:@"html" inDirectory:@"Resources"]
@@ -61,29 +97,39 @@
 }
 
 - (void)loadLocalHtml {
-    NSString *htmlPath = [self locateHtml];
-    if (!htmlPath) {
-        /* 找不到页面：显示简单提示，避免白屏无从排查 */
-        UILabel *lb = [[UILabel alloc] initWithFrame:self.view.bounds];
-        lb.text = @"未找到 index.html\n请把它放到 .app 包内后重新打包。";
-        lb.textAlignment = NSTextAlignmentCenter;
-        lb.numberOfLines = 0;
-        [self.view addSubview:lb];
-        return;
+    @try {
+        NSString *htmlPath = [self locateHtml];
+        if (!htmlPath) {
+            _writeLogLine(@"index.html NOT FOUND");
+            UILabel *lb = [[UILabel alloc] initWithFrame:self.view.bounds];
+            lb.text = @"未找到 index.html\n请把它放到 .app 包内后重新打包。";
+            lb.textAlignment = NSTextAlignmentCenter;
+            lb.numberOfLines = 0;
+            [self.view addSubview:lb];
+            return;
+        }
+        _writeLogLine(@"loading index.html");
+        NSURL *url = [NSURL fileURLWithPath:htmlPath];
+        NSURL *readAccess = [NSURL fileURLWithPath:[htmlPath stringByDeletingLastPathComponent] isDirectory:YES];
+        [self.webView loadFileURL:url allowingReadAccessToURL:readAccess];
+    } @catch (NSException *e) {
+        _writeLogLine([NSString stringWithFormat:@"loadLocalHtml exception: %@ %@", e.name, e.reason]);
     }
-    NSURL *url = [NSURL fileURLWithPath:htmlPath];
-    NSURL *readAccess = [NSURL fileURLWithPath:[htmlPath stringByDeletingLastPathComponent] isDirectory:YES];
-    [self.webView loadFileURL:url allowingReadAccessToURL:readAccess];
 }
 
 /* 允许访问网络接口（QQ 公告、工作日联网更新） */
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
         decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
-    if (@available(iOS 10.0, *)) {
-        decisionHandler(WKNavigationActionPolicyAllow);
-    } else {
-        decisionHandler(WKNavigationActionPolicyAllow);
-    }
+    decisionHandler(WKNavigationActionPolicyAllow);
+}
+
+- (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(nullability WKNavigation *)navigation
+      withError:(NSError *)error {
+    _writeLogLine([NSString stringWithFormat:@"webview load error: %@", error.localizedDescription ?: @""]);
+}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(nullability WKNavigation *)navigation {
+    _writeLogLine(@"webview load finished OK");
 }
 
 - (BOOL)prefersStatusBarHidden {
