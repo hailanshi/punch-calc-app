@@ -89,7 +89,7 @@ jobs:
           APP="build/Build/Products/Release-iphoneos/PunchCalc.app"
           mkdir -p _payload/Payload
           cp -R "$APP" _payload/Payload/PunchCalc.app
-          ( cd _payload && zip -qry ../../punch-calculator.ipa Payload )
+          ( cd _payload && zip -qry "${GITHUB_WORKSPACE}/punch-calculator.ipa" Payload )
 
       - name: Upload .ipa
         if: steps.check.outputs.status == 'ok'
