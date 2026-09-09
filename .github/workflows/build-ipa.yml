@@ -1,8 +1,4 @@
-# =====================================================================
-# PunchCalc - 云端自动打包 .ipa（免费，无 Mac / 无开发者账号）
-# 收到推送后自动：xcodegen 生成工程 -> 编译 -> 注入 index.html/图标 -> 打 .ipa
-# 失败时会单独上传 build.log 供排查；成功则上传 punch-calculator.ipa。
-# =====================================================================
+# PunchCalc 云端自动打包（带可靠日志抓取）
 name: Build PunchCalc IPA
 
 on:
@@ -24,32 +20,40 @@ jobs:
         working-directory: ios-shell/PunchCalcApp
         run: xcodegen generate
 
-      - name: Build & diagnose
+      - name: Build & capture log
         working-directory: ios-shell/PunchCalcApp
+        shell: bash
         run: |
-          echo "===== SCHEMES ====="
-          xcodebuild -list -project PunchCalc.xcodeproj 2>&1
-          echo "===== BUILD START ====="
-          xcodebuild \
-            -project PunchCalc.xcodeproj \
-            -scheme PunchCalc \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath build \
-            -sdk iphoneos \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 | tee build.log
-          echo "===== BUILD END (exit ${PIPESTATUS[0]}) ====="
+          set +e
+          {
+            echo "===== SCHEMES ====="
+            xcodebuild -list -project PunchCalc.xcodeproj 2>&1
+            echo "===== BUILD START ====="
+            xcodebuild \
+              -project PunchCalc.xcodeproj \
+              -scheme PunchCalc \
+              -configuration Release \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath build \
+              -sdk iphoneos \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              build 2>&1
+            echo "===== BUILD END ====="
+          } | tee build.log
+          code=${PIPESTATUS[0]}
+          echo "STEP_EXIT_CODE=$code"
+          ls -la build.log
+          exit $code
 
-      - name: Upload build log (always, for troubleshooting)
+      - name: Upload build log (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: ios-shell/PunchCalcApp/build.log
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Ad-hoc sign
         if: success()
