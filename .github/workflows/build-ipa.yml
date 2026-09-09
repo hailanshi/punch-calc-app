@@ -44,6 +44,14 @@ jobs:
           } | tee build.log
           code=${PIPESTATUS[0]}
           echo "STEP_EXIT_CODE=$code"
+          if [ "$code" -ne 0 ]; then
+            echo "===== ERROR LINES ====="
+            grep -inE 'error:|fatal error|ld: |BUILD FAILED|Undefined|not found|unknown|failed|No such|cannot|unable' build.log | head -40 | while IFS= read -r l; do
+              echo "::error::$l"
+            done
+            echo "===== TAIL ====="
+            tail -25 build.log
+          fi
           ls -la build.log
           exit $code
 
