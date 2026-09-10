@@ -422,11 +422,11 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
       <div class="card pad helpSec">
         <h3>🕐 工时判定规则</h3>
-        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>。<br>
-        2. 周六、周日上班：全部工时计为<b>周末加班</b>，不计正常出勤。<br>
-        3. 法定节假日上班：全部工时计为<b>节假日加班</b>，不计正常出勤。<br>
-        4. 未打卡的日期自动判定：<b>法定节假日→休息</b>(按 8h 计入有效出勤、享有底薪)；<b>周末→普通休息</b>(无底薪、不影响全勤)；<b>工作日→缺勤</b>(当月全勤清零)。当月未来日期暂不算缺勤。</p>
-        <p>自动补卡只填充工作日；周末、法定节假日、已有记录的日期自动跳过。内置 2026–2029 法定节假日（调休补班日待官方发布后可用「联网更新」校正）；每月标准工时＝该月工作日×8，各月不同。</p>
+        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班（1.5 倍）</b>。<br>
+        2. 周末上班：全部工时计为<b>周末加班（2 倍）</b>，不计正常出勤。<br>
+        3. <b>法定节假日当天</b>上班：全部工时计<b>节假日加班（3 倍）</b>。注意：只有国家强制三倍工资的法定节假日当天才算 3 倍（元旦 1 天、春节除夕+初一~初三 4 天、清明 1 天、劳动节 2 天、端午 1 天、中秋 1 天、国庆 3 天，共 13 天/年）；同一次放假的<b>连休日</b>属休息日，上班按 2 倍计。<br>
+        4. 未打卡的日期自动判定：<b>法定节假日→休息</b>(按 8h 计入有效出勤、享有底薪)；<b>周末 / 放假连休日→普通休息</b>(无底薪、不影响全勤)；<b>工作日→缺勤</b>(当月全勤清零)。当月未来日期暂不算缺勤。</p>
+        <p>自动补卡只填充工作日；周末、法定节假日、放假连休日、已有记录的日期自动跳过。内置 2026–2029 节假日（调休补班日待官方发布后可用「联网更新」校正）；每月标准工时＝该月工作日×8，各月不同。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🧮 工资计算公式</h3>
@@ -584,6 +584,48 @@ var MAKEUP = {
   '2026':['01-04','02-14','02-28','05-09','09-20','10-10']
 };
 
+/* 法定节假日（国家强制三倍工资的当天）：
+ * 元旦1天、春节除夕+初一~初三共4天、清明1天、劳动节5/1~5/2共2天、端午1天、中秋1天、国庆10/1~10/3共3天 = 13天/年。
+ * 其余「放假连休日」只是休息日（上班按 2 倍），不按 3 倍。 */
+var HOLI_3X = {
+  '2026':{
+    '01-01':'元旦',
+    '02-16':'春节(除夕)','02-17':'春节','02-18':'春节','02-19':'春节',
+    '04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-19':'端午节',
+    '09-25':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2027':{
+    '01-01':'元旦',
+    '02-05':'春节(除夕)','02-06':'春节','02-07':'春节','02-08':'春节',
+    '04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-09':'端午节',
+    '09-15':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2028':{
+    '01-01':'元旦',
+    '01-25':'春节(除夕)','01-26':'春节','01-27':'春节','01-28':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '05-28':'端午节',
+    '10-03':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2029':{
+    '01-01':'元旦',
+    '02-12':'春节(除夕)','02-13':'春节','02-14':'春节','02-15':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-16':'端午节',
+    '09-22':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  }
+};
+
 /* ---------------- 存储（含无 localStorage 时的内存兜底） ---------------- */
 var _mem = {};
 function storeGet(k, d){
@@ -660,16 +702,20 @@ function isWeekend(dateStr){
 }
 function monthDays(y, m){ return new Date(y, m, 0).getDate(); }
 
-/* 日期归类：holiday 法定节假日 / weekend 周末 / workday 工作日(含调休上班日) */
+/* 日期归类：
+ *  holiday      法定节假日（国家强制 3 倍工资的当天）
+ *  holiday_rest 放假连休日（非强制3倍，上班按休息日 2 倍计）
+ *  weekend      周末     workday 工作日(含调休上班日) */
 function classify(dateStr){
   var p = dateStr.split('-'), y = p[0], md = p[1] + '-' + p[2];
-  var off = HOLI_OFF[y] || {};
-  var cust = null;
   var cs = getCustom();
-  for (var i = 0; i < cs.length; i++){ if (cs[i].date === dateStr){ cust = cs[i]; break; } }
-  if (off[md] || cust){
-    return {type:'holiday', name: (cust ? cust.name : (off[md] || '法定节假日'))};
+  for (var i = 0; i < cs.length; i++){
+    if (cs[i].date === dateStr) return {type:'holiday', name: cs[i].name};
   }
+  var t3 = HOLI_3X[y] || {};
+  if (t3[md]) return {type:'holiday', name: t3[md]};
+  var off = HOLI_OFF[y] || {};
+  if (off[md]) return {type:'holiday_rest', name: off[md]};
   var mk = MAKEUP[y] || [];
   if (mk.indexOf(md) >= 0) return {type:'workday', name:''};
   if (isWeekend(dateStr)) return {type:'weekend', name:''};
@@ -686,8 +732,9 @@ function splitHours(dateStr, type, hours){
   hours = isFinite(hours) ? +hours : 0;
   if (type === 'work' && hours > 0){
     var c = classify(dateStr).type;
-    if (c === 'holiday'){ h = hours; }
-    else if (c === 'weekend'){ w = hours; }
+    if (c === 'holiday'){ h = hours; }                 // 法定节假日(强制3倍)
+    else if (c === 'holiday_rest'){ w = hours; }       // 放假连休日(休息日2倍)
+    else if (c === 'weekend'){ w = hours; }            // 周末(2倍)
     else { n = Math.min(hours, 8); d = Math.max(0, hours - 8); }
   }
   return {n:r1(n), d:r1(d), w:r1(w), h:r1(h)};
@@ -859,11 +906,11 @@ function calcMonth(ym){
       else if (r.type === 'absent'){ sum.absent++; hasAbsent = true; }
       continue;
     }
-    /* 无打卡记录 → 自动判定：法定节假日休息 / 普通休息(周末) / 缺勤(工作日) */
+    /* 无打卡记录 → 自动判定：法定节假日休息 / 普通休息(周末·放假连休) / 缺勤(工作日) */
     if (isCur && ds > today) continue;   // 当月未来日子先不算缺勤
     var c = classify(ds);
     if (c.type === 'holiday'){ sum.legalRest++; }
-    else if (c.type === 'weekend'){ /* 普通休息，不影响工资 */ }
+    else if (c.type === 'holiday_rest' || c.type === 'weekend'){ /* 普通休息，不影响工资 */ }
     else { sum.absent++; hasAbsent = true; }
   }
   sum.effHours = sum.normal + sum.legalRest * 8;
@@ -1001,9 +1048,10 @@ function autoSuggestType(dateStr){
 }
 function punchCatText(dateStr){
   var c = classify(dateStr);
-  if (c.type === 'holiday') return '法定节假日 · ' + c.name;
-  if (c.type === 'weekend') return '周末';
-  return '工作日';
+  if (c.type === 'holiday') return '法定节假日(3倍) · ' + c.name;
+  if (c.type === 'holiday_rest') return '放假连休日(2倍) · ' + c.name;
+  if (c.type === 'weekend') return '周末(2倍)';
+  return '工作日(1.5倍加班)';
 }
 function resetPunchForm(){
   _editDate = '';
@@ -1070,14 +1118,10 @@ function punchChanged(){
     $('pCat').textContent = punchCatText(ds);
     var note = '';
     if (c.type==='holiday') note = '当天为法定节假日：上班计 3 倍节假日加班';
+    else if (c.type==='holiday_rest') note = '当天为放假连休日（非法定）：上班按休息日 2 倍计，不计正常出勤';
     else if (c.type==='weekend') note = '当天为周末：上班全部计周末加班（2 倍），不计正常出勤';
     else note = '当天为工作日：8h 内正常出勤，超出部分计平日加班';
     $('pCatNote').textContent = note;
-    /* 新建且未手动选类型时，跟随日期类别自动建议 */
-    if (!_manualType){
-      var s = autoSuggestType(ds);
-      if (s !== _curType){ _curType = s; pickTypeUI(s); }
-    }
     var hours = parseFloat(($('pHours').value || '0').toString().replace(',', '.'));
     var pv = $('pPreview');
     if (_curType === 'work' && hours > 0){
@@ -1085,8 +1129,8 @@ function punchChanged(){
       var parts = [];
       if (sp.n>0) parts.push('正常出勤 ' + fmtH(sp.n) + 'h');
       if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（1.5倍）');
-      if (sp.w>0) parts.push('周末加班 ' + fmtH(sp.w) + 'h（2倍）');
-      if (sp.h>0) parts.push('节假日加班 ' + fmtH(sp.h) + 'h（3倍）');
+      if (sp.w>0) parts.push((c.type==='holiday_rest'?'休息日加班 ':'周末加班 ') + fmtH(sp.w) + 'h（2倍）');
+      if (sp.h>0) parts.push('法定节假日加班 ' + fmtH(sp.h) + 'h（3倍）');
       pv.textContent = '将记入：' + (parts.length?parts.join(' + '):'0h（请确认工时）');
     } else if (_curType === 'holiday'){
       pv.textContent = '法定节假日休息：按 8h 计入有效出勤，享有底薪（比例按底薪折算），不影响全勤。';
@@ -1221,7 +1265,7 @@ function backfillBase(ym, uptoToday){
     if (uptoToday && isCur && ds > today) break;
     try{
       var c = classify(ds);
-      if (c.type === 'holiday' || c.type === 'weekend'){ skip++; continue; }
+      if (c.type === 'holiday' || c.type === 'holiday_rest' || c.type === 'weekend'){ skip++; continue; }
       if (map[ds]){ skip++; continue; }
       var rec = buildRec(ds, 'work', defH, '自动补卡');
       map[ds] = true;
@@ -1641,24 +1685,28 @@ function renderHolidays(){
     cHtml += '</div>';
     $('holiCustomWrap').innerHTML = cHtml;
 
-    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置法定节假日（2026–2029，不可删除）</div>';
+    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置节假日（2026–2029，不可删除）</div>';
+    bHtml += '<div class="hint" style="margin-top:4px;">只有<b>法定节假日当天</b>（国家强制三倍工资）按 3 倍计；其余放假连休日按休息日 2 倍计。</div>';
     var years = ['2026','2027','2028','2029'];
-    var cnt = 0;
     for (var y=0;y<years.length;y++){
-      var off = HOLI_OFF[years[y]] || {};
+      var yy = years[y];
+      var off = HOLI_OFF[yy] || {};
+      var t3 = HOLI_3X[yy] || {};
       var names = {};
-      for (var k in off){ var nm = off[k]; names[nm] = (names[nm]||0)+1; }
-      bHtml += '<div style="margin-top:8px;font-size:13px;color:var(--ink);font-weight:700;">' + years[y] + '年</div>';
+      for (var k in t3){ var nm = t3[k]; names[nm] = (names[nm]||0)+1; }
+      var n3 = 0; for (var kk in t3) n3++;
+      var nAll = 0; for (var k2 in off) nAll++;
+      var restN = nAll - n3; if (restN < 0) restN = 0;
+      bHtml += '<div style="margin-top:10px;font-size:13px;color:var(--ink);font-weight:700;">' + yy + '年　<span style="color:var(--main-deep);">强制3倍 ' + n3 + ' 天</span>' + (restN>0?('<span style="color:var(--ink3);">　放假连休(2倍) ' + restN + ' 天</span>'):'') + '</div>';
       bHtml += '<div style="font-size:12px;color:var(--ink3);margin-top:2px;">';
       var first = true;
       for (var nm2 in names){
         if (!first) bHtml += '　'; first = false;
         bHtml += esc(nm2) + '×' + names[nm2] + '天';
-        cnt += names[nm2];
       }
       bHtml += '</div>';
     }
-    bHtml += '<div class="hint" style="margin-top:8px;">共收录 ' + cnt + ' 个放假日期（含调休连休日期）；周末调休补班日会计为工作日。数据源：国务院办公厅放假安排。</div>';
+    bHtml += '<div class="hint" style="margin-top:10px;">法定节假日 = 元旦1天 + 春节(除夕+初一~初三)4天 + 清明1天 + 劳动节2天 + 端午1天 + 中秋1天 + 国庆3天 = 13天/年；周末调休补班日会计为工作日。</div>';
     bHtml += '</div>';
     $('holiBuiltinWrap').innerHTML = bHtml;
   }catch(e){ toast('节假日管理加载失败', 'bad'); }
