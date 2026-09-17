@@ -529,6 +529,7 @@ var LS_SET  = 'punchSalarySettings_v1';
 var LS_CUS  = 'punchSalaryCustomHolidays_v1';
 var LS_THEME= 'punchSalaryTheme_v1';
 var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
+var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 
 var DEFAULTS = {
   base:2700, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
@@ -727,6 +728,16 @@ function getCustom(){ var c = storeGet(LS_CUS, []); return Array.isArray(c) ? c 
 function setCustom(c){ storeSet(LS_CUS, c); }
 function getStdMap(){ var m = storeGet(LS_STD, {}); return m && typeof m === 'object' ? m : {}; }
 function setStdMap(m){ storeSet(LS_STD, m); }
+/* 底薪按月：某月单独锁定的值优先，否则用设置里的全局底薪。
+ * 这样调薪后回头看历史月份不会被改写（如 8月2520、9月起2700）。 */
+function getBaseMap(){ var m = storeGet(LS_BASE, {}); return m && typeof m === 'object' ? m : {}; }
+function setBaseMap(m){ storeSet(LS_BASE, m); }
+function baseFor(ym, S){
+  var m = getBaseMap();
+  if (isFinite(parseFloat(m[ym]))) return parseFloat(m[ym]);
+  S = S || getSet();
+  return (S.base > 0) ? S.base : 0;
+}
 function getThemeKey(){ var t = storeGet(LS_THEME, 'pink'); return THEMES[t] ? t : 'pink'; }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 
@@ -1042,10 +1053,11 @@ function calcMonth(ym){
   /* 时薪保留完整精度参与运算：公司是"逐项算完再四舍五入"，
    * 若先把时薪取整会累积误差（2520÷174=14.482759，取整成14.48 会让 60h 加班少 0.25 元）。
    * 做法与公司工资条一致：每个金额项各自 round 到分后相加。 */
-  var hourly = (stdOt > 0) ? (S.base / stdOt) : (S.base / 174);
+  var base = baseFor(ym, S);            /* 底薪按月：该月锁定的值优先 */
+  var hourly = (stdOt > 0) ? (base / stdOt) : (base / 174);
 
   var m = {};
-  m.base = money2(S.base * ratio);
+  m.base = money2(base * ratio);
   m.post = money2(S.post * ratio);
   m.perf = money2(S.perf * ratio);
   m.full = hasAbsent ? 0 : money2(S.full);
@@ -1062,6 +1074,8 @@ function calcMonth(ym){
   m.tax = taxFor(m.taxBase, S);
   m.total = money2(m.taxBase - m.social - m.tax);
   m.ratio = ratio;
+  m.baseUsed = base;        /* 该月实际使用的底薪（按月锁定值优先） */
+  m.baseIsLocked = isFinite(parseFloat(getBaseMap()[ym]));
   m.stdBase = stdBase;      /* 底薪折算分母 */
   m.stdOt = stdOt;          /* 加班时薪分母 */
   m.workdays = si.workdays;
@@ -1093,7 +1107,9 @@ function refreshHome(){
       $('totalMeta').textContent = '本月暂无记录 · 打卡/补卡后自动计算';
     } else {
       $('totalMoney').innerHTML = '<small>¥</small>' + m.total.toFixed(2);
-      $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h　底薪分母 ' + m.stdBase + 'h　加班时薪 ' + fmtMoney(m.hourly) + '（底薪÷' + m.stdOt + 'h）';
+      $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h　底薪 ' + fmtMoney(m.baseUsed)
+        + (m.baseIsLocked ? '（本月锁定）' : '（跟随设置）')
+        + '　底薪分母 ' + m.stdBase + 'h　加班时薪 ' + fmtMoney(m.hourly) + '（底薪÷' + m.stdOt + 'h）';
     }
 
     var otH = su.wd + su.we + su.hol;
@@ -1679,6 +1695,20 @@ function renderDivMode(ym){
       + (fixed ? '' : '<br>出勤比例 = 有效出勤工时 ÷ ' + monthly + 'h（封顶 100%），用于折算底薪/补贴/绩效。');
   }
 }
+/* 底薪按月：设置页保存时写入「当前查看的月份」，这样调薪不会改写历史月份。
+ * 某月没有单独存过值时，回落到设置里的全局底薪。 */
+function renderBaseNote(){
+  var el = $('uBase'); if (!el) return;
+  var S = getSet();
+  var map = getBaseMap();
+  var months = Object.keys(map).sort();
+  var locked = isFinite(parseFloat(map[_curYM]));
+  var txt = '保存后写入<b>当前查看的月份 ' + ymLabel(_curYM) + '</b>（现在是 '
+    + fmtMoney(locked ? parseFloat(map[_curYM]) : S.base) + '）。调薪时切到新月份再保存，历史月份不会被改写。';
+  if (months.length) txt += '<br>已单独存过的月份：' + months.map(function(k){ return k + '=' + fmtMoney(parseFloat(map[k])); }).join('、');
+  el.innerHTML = txt;
+}
+
 /* 个税设置提示 */
 function renderTaxHint(){
   var el = $('uTax'); if (!el) return;
@@ -1710,7 +1740,7 @@ function setBaseDiv(mode){  try{
 function renderSettings(){
   try{
     var S = getSet();
-    $('sBase').value = S.base;
+    $('sBase').value = baseFor(_curYM, S);   /* 显示当前查看月份的底薪 */
     $('sStd').value = S.std;
     $('sStdOt').value = S.stdOt || 174;
     $('sAuto').value = S.auto;
@@ -1729,6 +1759,7 @@ function renderSettings(){
     renderTaxHint();
     var map = getStdMap();
     $('uBase').textContent = '底薪 / 岗位补贴 / 绩效 按「有效出勤 ÷ 底薪折算分母」折算；加班按「底薪 ÷ 加班时薪分母 × 倍数」';
+    renderBaseNote();
     renderDivMode(_curYM);
     $('uAuto').textContent = '补卡默认拆分：8h 正常出勤 + 其余按平日加班';
     $('autoHrInfo').textContent = S.auto;
@@ -1758,8 +1789,13 @@ function saveSettings(){
       auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
     };
     setSet(s);
+    /* 底薪按月落库：把刚保存的底薪写入「当前查看的月份」，
+     * 这样以后调薪（切到新月份再改）不会改写历史月份的数字。 */
+    var bm = getBaseMap();
+    bm[_curYM] = s.base;
+    setBaseMap(bm);
     $('autoHrInfo').textContent = s.auto;
-    toast('设置已保存', 'good');
+    toast('设置已保存（底薪 ' + fmtMoney(s.base) + ' 已记入 ' + ymLabel(_curYM) + '）', 'good');
     refreshHome();
   }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
@@ -1770,6 +1806,7 @@ function doResetSettings(){
   try{
     setSet(clone(DEFAULTS));
     setStdMap({});
+    setBaseMap({});
     renderSettings();
     refreshHome();
     toast('已恢复默认参数', 'good');
@@ -1980,6 +2017,7 @@ window.netUpdateStd = netUpdateStd;
 window.setBaseDiv = setBaseDiv;
 window.renderDivMode = renderDivMode;
 window.renderTaxHint = renderTaxHint;
+window.renderBaseNote = renderBaseNote;
 window.setTheme = setTheme;
 window.showHolidays = showHolidays;
 window.addHoliday = addHoliday;
