@@ -340,10 +340,18 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <button type="button" class="accHead on" data-g="g1" onclick="window.toggleAcc(this)">基础参数<span class="chev">▶</span></button>
         <div class="accBody on" id="acc-g1">
           <div class="field"><label>底薪（元）</label><input type="number" id="sBase" step="10"><div class="unit" id="uBase"></div></div>
-          <div class="field"><label>每月标准工时（小时）</label>
+          <div class="field"><label>加班时薪分母（小时）</label>
+            <input type="number" id="sStdOt" step="1">
+            <div style="margin-top:8px;">
+              <button type="button" class="btn soft mini" id="netBtn" onclick="window.netUpdateStd()">🌐 联网更新当月排班</button>
+            </div>
+            <div class="unit" id="uStdOt"></div>
+          </div>
+          <div class="field"><label>底薪折算分母（小时）</label>
             <input type="number" id="sStd" step="1">
             <div style="margin-top:8px;">
-              <button type="button" class="btn soft mini" id="netBtn" onclick="window.netUpdateStd()">🌐 联网更新（当月工作日 × 8）</button>
+              <button type="button" class="btn soft mini" onclick="window.setBaseDiv('monthly')">当月排班（工作日×8）</button>
+              <button type="button" class="btn soft mini" onclick="window.setBaseDiv('fixed')">用固定值</button>
             </div>
             <div class="unit" id="uStd"></div>
           </div>
@@ -515,7 +523,9 @@ var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYY
 
 var DEFAULTS = {
   base:2700, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
-  meal:15, mealCap:360, std:174, auto:11
+  meal:15, mealCap:360, std:174, auto:11,
+  stdOt:174,        /* 加班时薪分母（固定值）。工资条校验点：平时单价 = stdOt的时薪 × 1.5 */
+  stdBase:'monthly' /* 底薪折算分母：'monthly'=当月排班工时(工作日×8)；'fixed'=用 std */
 };
 
 var TYPE_META = {
@@ -913,12 +923,21 @@ function loadBanner(){
 }
 
 /* ---------------- 首页：月统计 + 工资 ---------------- */
-function stdHoursForMonth(ym){
+/* 两个分母，各管一件事（公司工资条就是这样拆的）：
+ *   stdBase（底薪折算分母）: 当月排班工时 = 工作日 × 8（8月=168），或固定值
+ *   stdOt  （加班时薪分母）: 固定值，默认 174 = 21.75天 × 8（《劳动法》月计薪天数）
+ * 实证：工资条「应出勤工时 168」用于出勤比例与底薪；加班单价 21.7241 = 2520÷174×1.5 */
+function stdInfo(ym){
   var map = getStdMap();
-  if (map[ym]) return map[ym];
   var s = getSet();
-  return (s.std > 0) ? s.std : 174;
+  var workdays = offlineWorkdays(ym);
+  var monthly = (map[ym] > 0) ? map[ym] : (workdays > 0 ? workdays * 8 : ((s.std > 0) ? s.std : 174));
+  var otDiv = (s.stdOt > 0) ? s.stdOt : 174;
+  if (s.stdBase === 'fixed'){ monthly = (s.std > 0) ? s.std : 174; }
+  return { baseDiv: monthly, otDiv: otDiv, monthly: monthly, workdays: workdays, netStd: map[ym] || null };
 }
+/* 兼容旧调用（历史上这个函数只返回一个"标准工时"）。加班时薪分母沿用旧语义。 */
+function stdHoursForMonth(ym){ return stdInfo(ym).otDiv; }
 function offlineWorkdays(ym){
   var p = ymParts(ym); var n = 0;
   var total = monthDays(p.y, p.m);
@@ -944,9 +963,14 @@ function calcMonth(ym){
     else if (r.type === 'absent'){ sum.absent++; hasAbsent = true; }
   }
   sum.effHours = sum.normal + sum.legalRest * 8;
-  var std = stdHoursForMonth(ym);
-  var ratio = (std > 0) ? Math.min(sum.effHours / std, 1) : (sum.effHours > 0 ? 1 : 0);
-  var hourly = (std > 0) ? money2(S.base / std) : money2(S.base / 174);
+  var si = stdInfo(ym);
+  var stdBase = si.baseDiv;                 /* 底薪/补贴/绩效 的出勤比例分母 */
+  var stdOt   = si.otDiv;                   /* 加班时薪分母 */
+  var ratio = (stdBase > 0) ? Math.min(sum.effHours / stdBase, 1) : (sum.effHours > 0 ? 1 : 0);
+  /* 时薪保留完整精度参与运算：公司是"逐项算完再四舍五入"，
+   * 若先把时薪取整会累积误差（2520÷174=14.482759，取整成14.48 会让 60h 加班少 0.25 元）。
+   * 做法与公司工资条一致：每个金额项各自 round 到分后相加。 */
+  var hourly = (stdOt > 0) ? (S.base / stdOt) : (S.base / 174);
 
   var m = {};
   m.base = money2(S.base * ratio);
@@ -963,7 +987,9 @@ function calcMonth(ym){
   m.social = money2(S.social);
   m.total = money2(m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social);
   m.ratio = ratio;
-  m.std = std;
+  m.stdBase = stdBase;      /* 底薪折算分母 */
+  m.stdOt = stdOt;          /* 加班时薪分母 */
+  m.workdays = si.workdays;
   m.hourly = hourly;
   m.sum = sum;
   m.recCount = 0;
@@ -992,7 +1018,7 @@ function refreshHome(){
       $('totalMeta').textContent = '本月暂无记录 · 打卡/补卡后自动计算';
     } else {
       $('totalMoney').innerHTML = '<small>¥</small>' + m.total.toFixed(2);
-      $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h / 标准 ' + m.std + 'h';
+      $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h　底薪分母 ' + m.stdBase + 'h　加班时薪 ' + fmtMoney(m.hourly) + '（底薪÷' + m.stdOt + 'h）';
     }
 
     var otH = su.wd + su.we + su.hol;
@@ -1012,11 +1038,13 @@ function refreshHome(){
     var ih = '';
     if (su.effHours === 0) ih = '无出勤工时 → 底薪类按 0 计算（法定休息或上班后会自动变化）。';
     else if (m.ratio >= 1) ih = '出勤达到标准，底薪类全额发放。';
-    else ih = '有效出勤未满标准 ' + m.std + 'h，底薪/补贴/绩效按 ' + Math.round(m.ratio*100) + '% 发放。';
+    else ih = '有效出勤未满底薪折算分母 ' + m.stdBase + 'h，底薪/补贴/绩效按 ' + Math.round(m.ratio*100) + '% 发放。';
     $('incomeHint').textContent = ih;
 
     var hs = '';
-    hs += rowHtml('标准工时（联网可调）', fmtH(m.std) + ' h');
+    hs += rowHtml('底薪折算分母（当月排班）', fmtH(m.stdBase) + ' h');
+    hs += rowHtml('加班时薪分母（固定值）', fmtH(m.stdOt) + ' h');
+    hs += rowHtml('加班时薪', fmtMoney(m.hourly) + ' /h');
     hs += rowHtml('实际出勤工时（正常出勤）', fmtH(su.normal) + ' h');
     hs += rowHtml('法定休息折算（' + su.legalRest + '天×8h）', fmtH(su.legalRest*8) + ' h');
     hs += rowHtml('有效出勤工时', fmtH(su.effHours) + ' h');
@@ -1548,11 +1576,44 @@ function doImportOverwrite(arg){
 }
 
 /* ---------------- 设置 ---------------- */
+/* 两个分母的口径说明。实证：工资条「应出勤工时 168」管底薪折算，
+ * 「加班单价 21.7241 = 2520÷174×1.5」管加班费，两者分母不同。 */
+function renderDivMode(ym){
+  var S = getSet();
+  var map = getStdMap();
+  var wd = offlineWorkdays(ym);
+  var monthly = (map[ym] > 0) ? map[ym] : (wd > 0 ? wd * 8 : 0);
+  var otEl = $('uStdOt');
+  if (otEl){
+    otEl.innerHTML = '加班时薪 = 底薪 ÷ <b>' + (S.stdOt || 174) + 'h</b>，固定值，与当月排班无关。'
+      + '<br>174 = 21.75 天 × 8（《劳动法》月计薪天数），公司工资条的加班单价通常按这个折算。'
+      + '<br>校验法：工资条上的「平时加班单价」应 = 底薪 ÷ ' + (S.stdOt || 174) + ' × 1.5 = '
+      + fmtMoney(money2((S.base || 0) / (S.stdOt || 174) * 1.5)) + '。';
+  }
+  var bEl = $('uStd');
+  if (bEl){
+    var fixed = (S.stdBase === 'fixed');
+    bEl.innerHTML = '底薪折算分母：<b>' + (fixed ? '固定值 ' + (S.std || 174) + 'h' : '当月排班 ' + monthly + 'h') + '</b>。'
+      + ymLabel(ym) + ' 排班 ' + (monthly || '—') + 'h。'
+      + (fixed ? '' : '<br>出勤比例 = 有效出勤工时 ÷ ' + monthly + 'h（封顶 100%），用于折算底薪/补贴/绩效。');
+  }
+}
+function setBaseDiv(mode){
+  try{
+    var S = getSet();
+    S.stdBase = (mode === 'fixed') ? 'fixed' : 'monthly';
+    setSet(S);
+    renderDivMode(_curYM);
+    toast(S.stdBase === 'fixed' ? '底薪折算分母已改为固定 ' + S.std + 'h' : '底薪折算分母已改为「当月排班」', 'good');
+    refreshHome();
+  }catch(e){ toast('切换失败：' + (e && e.message ? e.message : e), 'bad'); }
+}
 function renderSettings(){
   try{
     var S = getSet();
     $('sBase').value = S.base;
     $('sStd').value = S.std;
+    $('sStdOt').value = S.stdOt || 174;
     $('sAuto').value = S.auto;
     $('sMeal').value = S.meal;
     $('sMealCap').value = S.mealCap;
@@ -1564,9 +1625,8 @@ function renderSettings(){
     $('sFull').value = S.full;
     $('sSocial').value = S.social;
     var map = getStdMap();
-    $('uBase').textContent = '加班时薪按 底薪 ÷ 标准工时 折算';
-    $('uStd').textContent = (map[_curYM] ? ('当前查看月 ' + ymLabel(_curYM) + ' 已用联网值 ' + map[_curYM] + 'h（工作日×8）· ') : '')
-      + '默认 174h；联网更新会按「当月工作日数 × 8」写入（支持调休）。';
+    $('uBase').textContent = '底薪 / 岗位补贴 / 绩效 按「有效出勤 ÷ 底薪折算分母」折算；加班按「底薪 ÷ 加班时薪分母 × 倍数」';
+    renderDivMode(_curYM);
     $('uAuto').textContent = '补卡默认拆分：8h 正常出勤 + 其余按平日加班';
     $('autoHrInfo').textContent = S.auto;
     renderThemeDots();
@@ -1587,6 +1647,8 @@ function saveSettings(){
       meal: Math.max(0, gv('sMeal', 15)),
       mealCap: Math.max(0, gv('sMealCap', 360)),
       std: Math.max(1, gv('sStd', 174)),
+      stdOt: Math.max(1, gv('sStdOt', 174)),
+      stdBase: (getSet().stdBase === 'fixed') ? 'fixed' : 'monthly',
       auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
     };
     setSet(s);
@@ -1637,10 +1699,13 @@ function netUpdateStd(){
         var map = getStdMap();
         map[ym] = std;
         setStdMap(map);
-        var S = getSet(); S.std = std; setSet(S);   // 同时作为默认值
-        $('sStd').value = std;
-        $('uStd').textContent = ymLabel(ym) + '：工作日 ' + wd + ' 天 × 8 = ' + std + 'h（已写入，支持调休）';
-        toast('联网更新成功：' + ymLabel(ym) + ' 标准工时 ' + std + 'h', 'good');
+        /* 联网值 = 当月排班工时（考勤口径）。它只影响「底薪折算分母」，
+         * 不会覆盖「加班时薪分母」——后者是固定值，正是工资条加班单价的来源。 */
+        var S = getSet();
+        if (S.stdBase === 'fixed'){ $('sStd').value = std; }
+        renderDivMode(ym);
+        toast('联网更新成功：' + ymLabel(ym) + ' 当月排班 ' + wd + ' 天 × 8 = ' + std + 'h'
+          + '（已用于底薪折算；加班时薪仍按底薪 ÷ ' + (S.stdOt || 174) + 'h）', 'good');
         refreshHome();
       })
       .catch(function(){
@@ -1806,6 +1871,8 @@ window.onImportFile = onImportFile;
 window.saveSettings = saveSettings;
 window.askResetSettings = askResetSettings;
 window.netUpdateStd = netUpdateStd;
+window.setBaseDiv = setBaseDiv;
+window.renderDivMode = renderDivMode;
 window.setTheme = setTheme;
 window.showHolidays = showHolidays;
 window.addHoliday = addHoliday;
