@@ -384,6 +384,15 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
           <div class="field"><label>绩效奖金（元）</label><input type="number" id="sPerf" step="10"></div>
           <div class="field"><label>全勤奖（元）</label><input type="number" id="sFull" step="10"></div>
           <div class="field"><label>每月社保扣除（元）</label><input type="number" id="sSocial" step="10"></div>
+          <div class="field"><label>计算个税</label>
+            <select id="sTaxOn" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;">
+              <option value="off">不计算（只看应发/扣社保）</option>
+              <option value="on">计算个税（单月算法）</option>
+            </select>
+            <div class="unit" id="uTax"></div>
+          </div>
+          <div class="field"><label>个税起征点（元/月）</label><input type="number" id="sTaxThr" step="100"></div>
+          <div class="field"><label>个税税率</label><input type="number" id="sTaxRate" step="0.01" min="0"></div>
         </div>
       </div>
 
@@ -530,7 +539,10 @@ var DEFAULTS = {
   base:2700, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
   meal:15, mealCap:360, std:174, auto:11,
   stdOt:174,        /* 加班时薪分母（固定值）。工资条校验点：平时单价 = 底薪÷stdOt × 1.5 */
-  stdBase:'monthly' /* 底薪折算分母：'monthly'=当月排班工时(工作日×8)；'fixed'=用 std */
+  stdBase:'monthly', /* 底薪折算分母：'monthly'=当月排班工时(工作日×8)；'fixed'=用 std */
+  taxOn:false,      /* 是否计算个税 */
+  taxThr:5000,      /* 个税起征点（月） */
+  taxRate:0.03      /* 个税税率；应纳税所得额超 3000 时会提示需按年表分档 */
 };
 
 var TYPE_META = {
@@ -653,7 +665,22 @@ function storeSet(k, v){
 }
 function getRecs(){ var a = storeGet(LS_REC, []); return Array.isArray(a) ? a : []; }
 function setRecs(a){ storeSet(LS_REC, a); }
-function getSet(){ var s = storeGet(LS_SET, null); if (!s) return clone(DEFAULTS); var o = clone(DEFAULTS); for (var k in s){ if (o.hasOwnProperty(k) && isFinite(parseFloat(s[k]))) o[k] = parseFloat(s[k]); } return o; }
+/* 读取设置：数值字段取数字；非数值字段（stdBase / taxOn 等布尔与枚举）原样继承，
+ * 否则会被 isFinite 过滤掉，导致「计算个税」这类开关存了也不生效。 */
+function getSet(){
+  var s = storeGet(LS_SET, null);
+  if (!s) return clone(DEFAULTS);
+  var o = clone(DEFAULTS);
+  for (var k in s){
+    if (!o.hasOwnProperty(k)) continue;
+    var v = s[k];
+    if (typeof v === 'number' && isFinite(v)){ o[k] = v; }
+    else if (typeof v === 'boolean'){ o[k] = v; }
+    else if (typeof v === 'string' && v !== ''){ o[k] = v; }
+    else if (isFinite(parseFloat(v))){ o[k] = parseFloat(v); }
+  }
+  return o;
+}
 function setSet(s){ storeSet(LS_SET, s); }
 function getCustom(){ var c = storeGet(LS_CUS, []); return Array.isArray(c) ? c : []; }
 function setCustom(c){ storeSet(LS_CUS, c); }
@@ -896,6 +923,26 @@ function stdInfo(ym){
 }
 /* 兼容旧调用：历史上这个函数只返回一个"标准工时"，语义等同加班时薪分母 */
 function stdHoursForMonth(ym){ return stdInfo(ym).otDiv; }
+
+/* ---------------- 个税（单月算法，与 Excel 一致） ----------------
+ * 应纳税所得额 = 应发工资 − 个人社保 − 起征点
+ * 个税 = max(0, 应纳税所得额) × 税率   ← 与 工资计算.xlsx 的
+ *        =MAX((D9-B17-5000)*0.03,0) 完全一致
+ * 注意：单月口径（非累计预扣法）。应纳税所得额超 3000 时已进入 10% 档，
+ *       本计算器只用单一税率会偏低，界面会提示。 */
+function taxFor(taxBase, S){
+  if (!S || !S.taxOn) return 0;
+  var thr = isFinite(S.taxThr) ? S.taxThr : 5000;
+  var rate = isFinite(S.taxRate) ? S.taxRate : 0.03;
+  var taxable = money2((+taxBase || 0) - (isFinite(S.social) ? S.social : 0) - thr);
+  if (taxable <= 0) return 0;
+  return money2(taxable * rate);
+}
+function taxableOf(taxBase, S){
+  if (!S) return 0;
+  var thr = isFinite(S.taxThr) ? S.taxThr : 5000;
+  return money2((+taxBase || 0) - (isFinite(S.social) ? S.social : 0) - thr);
+}
 function offlineWorkdays(ym){
   var p = ymParts(ym); var n = 0;
   var total = monthDays(p.y, p.m);
@@ -954,7 +1001,10 @@ function calcMonth(ym){
   m.otMoney = money2(otWd + otWe + otHol);
   m.meal = money2(Math.min(sum.mealDays * S.meal, S.mealCap));
   m.social = money2(S.social);
-  m.total = money2(m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social);
+  /* 计税基数 = 应发（含底薪/补贴/加班/餐补，未扣社保） */
+  m.taxBase = money2(m.base + m.post + m.perf + m.full + m.otMoney + m.meal);
+  m.tax = taxFor(m.taxBase, S);
+  m.total = money2(m.taxBase - m.social - m.tax);
   m.ratio = ratio;
   m.stdBase = stdBase;      /* 底薪折算分母 */
   m.stdOt = stdOt;          /* 加班时薪分母 */
@@ -1000,13 +1050,19 @@ function refreshHome(){
     inc += rowHtml('　· 周末/假期休息日 ' + fmtH(su.we) + 'h × ' + S.ot2, fmtMoney(m.otWe), 'muted');
     inc += rowHtml('　· 法定当天 ' + fmtH(su.hol) + 'h × ' + S.ot3, fmtMoney(m.otHol), 'muted');
     inc += rowHtml('餐补（' + su.mealDays + '天 × ' + S.meal + '，上限' + S.mealCap + '）', fmtMoney(m.meal));
+    inc += rowHtml('应发工资', fmtMoney(m.taxBase));
     inc += rowHtml('社保扣除', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
+    if (S.taxOn){
+      var taxTag = (taxableOf(m.taxBase, S) > 3000) ? '（已超 3% 档，税率需按年表分档）' : '';
+      inc += rowHtml('个税' + taxTag, '-' + fmtMoney(Math.abs(m.tax)).replace('¥',''), 'red');
+    }
     inc += rowHtml('当月总收入', fmtMoney(m.total), 'green');
     $('incomeRows').innerHTML = inc;
     var ih = '';
     if (su.effHours === 0) ih = '无出勤工时 → 底薪类按 0 计算（法定休息或上班后会自动变化）。';
     else if (m.ratio >= 1) ih = '出勤达到标准，底薪类全额发放。';
     else ih = '有效出勤未满底薪折算分母 ' + m.stdBase + 'h，底薪/补贴/绩效按 ' + Math.round(m.ratio*100) + '% 发放。';
+    if (su.absent > 0) ih += '　⚠️ 有 ' + su.absent + ' 天缺勤（工作日没打卡即算），全勤奖已清零。';
     $('incomeHint').textContent = ih;
 
     var hs = '';
@@ -1622,6 +1678,25 @@ function renderDivMode(ym){
       + (fixed ? '' : '<br>出勤比例 = 有效出勤工时 ÷ ' + monthly + 'h（封顶 100%），用于折算底薪/补贴/绩效。');
   }
 }
+/* 个税设置提示 */
+function renderTaxHint(){
+  var el = $('uTax'); if (!el) return;
+  var S = getSet();
+  var thr = isFinite(S.taxThr) ? S.taxThr : 5000;
+  var rate = isFinite(S.taxRate) ? S.taxRate : 0.03;
+  var cur = calcMonth(_curYM);
+  var taxable = taxableOf(cur.taxBase, S);
+  var warn = (taxable > 3000)
+    ? '<br><b style="color:#d33;">⚠️ 本月应纳税所得额 ' + fmtMoney(taxable) + ' 已超过 3% 档上限 3000 元</b>，'
+      + '实际应进入 10% 档（按年累计表分档速算）。此处只按单一税率 ' + (rate * 100) + '% 计算，结果会偏低，请以工资条为准。'
+    : '';
+  el.innerHTML = '算法（与「工资计算.xlsx」一致，单月口径）：'
+    + '<br>应纳税所得额 = 应发工资 − 个人社保 − 起征点 ' + fmtMoney(thr)
+    + '<br>个税 = max(0, 应纳税所得额) × ' + (rate * 100) + '%'
+    + '<br>' + ymLabel(_curYM) + '：应发 ' + fmtMoney(cur.taxBase) + ' − 社保 ' + fmtMoney(S.social)
+    + ' − ' + fmtMoney(thr) + ' = 应纳税所得额 ' + fmtMoney(taxable) + ' → 个税 ' + fmtMoney(taxFor(cur.taxBase, S))
+    + warn;
+}
 function setBaseDiv(mode){
   try{
     var S = getSet();
@@ -1648,6 +1723,10 @@ function renderSettings(){
     $('sPerf').value = S.perf;
     $('sFull').value = S.full;
     $('sSocial').value = S.social;
+    $('sTaxOn').value = S.taxOn ? 'on' : 'off';
+    $('sTaxThr').value = isFinite(S.taxThr) ? S.taxThr : 5000;
+    $('sTaxRate').value = isFinite(S.taxRate) ? S.taxRate : 0.03;
+    renderTaxHint();
     var map = getStdMap();
     $('uBase').textContent = '加班时薪按 底薪 ÷ 标准工时 折算';
     renderDivMode(_curYM);
@@ -1665,6 +1744,9 @@ function saveSettings(){
       ot2:  Math.max(0, gv('sOT2', 2)),
       ot3:  Math.max(0, gv('sOT3', 3)),
       social: Math.max(0, gv('sSocial', 420)),
+      taxOn: (($('sTaxOn').value === 'on')),
+      taxThr: Math.max(0, gv('sTaxThr', 5000)),
+      taxRate: Math.max(0, gv('sTaxRate', 0.03)),
       full: Math.max(0, gv('sFull', 100)),
       perf: Math.max(0, gv('sPerf', 50)),
       post: Math.max(0, gv('sPost', 400)),
@@ -1894,6 +1976,7 @@ window.askResetSettings = askResetSettings;
 window.netUpdateStd = netUpdateStd;
 window.setBaseDiv = setBaseDiv;
 window.renderDivMode = renderDivMode;
+window.renderTaxHint = renderTaxHint;
 window.setTheme = setTheme;
 window.showHolidays = showHolidays;
 window.addHoliday = addHoliday;
