@@ -357,9 +357,9 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <button type="button" class="accHead on" data-g="g2" onclick="window.toggleAcc(this)">加班时薪倍数<span class="chev">▶</span></button>
         <div class="accBody on" id="acc-g2">
           <div class="field"><label>平日加班（倍）</label><input type="number" id="sOT1" step="0.1" min="1"></div>
-          <div class="field"><label>周末加班（倍）</label><input type="number" id="sOT2" step="0.1" min="1"></div>
-          <div class="field"><label>法定节假日加班（倍）</label><input type="number" id="sOT3" step="0.1" min="1"></div>
-          <div class="unit" style="margin-top:-4px;">时薪 = 底薪 ÷ 每月标准工时；加班按对应倍数计算。</div>
+          <div class="field"><label>周末 / 法定假期休息日（倍）</label><input type="number" id="sOT2" step="0.1" min="1"></div>
+          <div class="field"><label>法定节假日当天（倍）</label><input type="number" id="sOT3" step="0.1" min="1"></div>
+          <div class="unit" style="margin-top:-4px;">时薪 = 底薪 ÷ 每月标准工时；只有法定节假日<b>当天</b>按上面第 3 档算，假期内的其它休息日按第 2 档（与周末同档）。</div>
         </div>
       </div>
 
@@ -412,13 +412,13 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     <div class="scroll">
       <div class="card pad helpSec">
         <h3>📌 功能简介</h3>
-        <p>打卡工资计算器：支持上班打卡、法定节假日休息、普通休息、缺勤四种记录；自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 节假日加班；按设定参数自动计算当月工资。所有数据保存在本机浏览器存储中，无需服务器。</p>
+        <p>打卡工资计算器：支持上班打卡、法定节假日休息、普通休息、缺勤四种记录；自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 法定当天三档加班；按设定参数自动计算当月工资。所有数据保存在本机浏览器存储中，无需服务器。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🕐 工时判定规则</h3>
         <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>。<br>
         2. 周六、周日上班：全部工时计为<b>周末加班</b>，不计正常出勤。<br>
-        3. 法定节假日上班：全部工时计为<b>节假日加班</b>，不计正常出勤。<br>
+        3. 法定节假日上班：<b>法定当天</b>全部工时计 3 倍加班；<b>假期内的非当天休息日</b>全部工时计 2 倍加班（与周末同档）。两种都不计正常出勤。<br>
         4. 法定节假日休息：视为出勤，按 8 小时计入有效出勤工时，享有底薪；普通休息无底薪、不影响全勤；缺勤则当月全勤清零。</p>
         <p>自动补卡只填充工作日；周末、法定节假日、已有记录的日期自动跳过。内置 2024–2026 国务院放假安排（含调休上班日），可与「设置 → 联网更新」交叉校验每月工作日。</p>
       </div>
@@ -429,16 +429,17 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <p><b>出勤比例</b> = min(有效出勤工时 ÷ 每月标准工时, 1)</p>
         <p>底薪 / 岗位补贴 / 绩效奖金 均乘以出勤比例；缺勤则全勤奖为 0，否则全额发放。</p>
         <p><b>时薪</b> = 底薪 ÷ 每月标准工时<br>
-        <b>加班工资</b> = 平日加班 × 时薪×平日倍数 + 周末加班 × 时薪×周末倍数 + 节假日加班 × 时薪×节假日倍数</p>
+        <b>加班工资</b> = 平日加班 × 时薪×平日倍数 + 周末加班 × 时薪×周末倍数 + 法定当天加班 × 时薪×法定倍数<br>
+        <b>注意</b>：只有<b>法定节假日当天</b>上班才是 3 倍；假期内其余休息日（但不是当天）上班按 2 倍算，与周末同档。</p>
         <p><b>餐补</b> = min(上班打卡天数 × 每日餐补, 餐补上限)；社保为固定扣除。</p>
       </div>
       <div class="card pad helpSec">
         <h3>⚙️ 默认参数一览</h3>
-        <p>底薪 2520 元 · 平日加班 1.5 倍 · 周末加班 2 倍 · 法定节假日 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 每月标准工时 174 小时 · 自动补卡工时 11 小时。</p>
+        <p>底薪 2700 元 · 平日加班 1.5 倍 · 周末加班 2 倍 · 法定当天 3 倍（假期内休息日 2 倍）· 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 每月标准工时默认 174 小时（联网更新后按当月工作日×8 自动计算）· 自动补卡工时 11 小时。</p>
       </div>
       <div class="card pad helpSec">
         <h3>📋 记录导出格式</h3>
-        <div class="fx">日期|类型|上班工时|正常工时|平日加班|周末加班|节假日加班|是否节假日|是否周末|备注</div>
+        <div class="fx">日期|类型|上班工时|正常工时|平日加班|周末加班|法定当天加班|是否节假日|是否周末|备注</div>
         <p style="margin-top:6px;">类型：work=上班打卡，holiday=法定节假日休息，rest=普通休息，absent=缺勤。支持追加 / 覆盖两种导入模式。</p>
       </div>
       <div class="card pad helpSec">
@@ -513,7 +514,7 @@ var LS_THEME= 'punchSalaryTheme_v1';
 var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
 
 var DEFAULTS = {
-  base:2520, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
+  base:2700, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
   meal:15, mealCap:360, std:174, auto:11
 };
 
@@ -559,6 +560,34 @@ var HOLI_OFF = {
     '06-19':'端午节','06-20':'端午节','06-21':'端午节',
     '09-25':'中秋节','09-26':'中秋节','09-27':'中秋节',
     '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
+  },
+  /* 2027-2029 官方调休通知尚未发布：放假区间暂按「法定当天 + 相邻周末」的保守口径列示，
+   * 调休补班日待官方通知发布后用「联网更新」校正；法定当天以 LEGAL_HOLI 为准，不受这里影响。 */
+  '2027':{
+    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
+    '02-05':'春节','02-06':'春节','02-07':'春节','02-08':'春节','02-09':'春节','02-10':'春节','02-11':'春节',
+    '04-03':'清明节','04-04':'清明节','04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
+    '06-09':'端午节','06-10':'端午节','06-11':'端午节',
+    '09-14':'中秋节','09-15':'中秋节','09-16':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
+  },
+  '2028':{
+    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
+    '01-25':'春节','01-26':'春节','01-27':'春节','01-28':'春节','01-29':'春节','01-30':'春节','01-31':'春节',
+    '04-02':'清明节','04-03':'清明节','04-04':'清明节',
+    '04-29':'劳动节','04-30':'劳动节','05-01':'劳动节','05-02':'劳动节','05-03':'劳动节',
+    '05-27':'端午节','05-28':'端午节','05-29':'端午节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'中秋节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
+  },
+  '2029':{
+    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
+    '02-12':'春节','02-13':'春节','02-14':'春节','02-15':'春节','02-16':'春节','02-17':'春节','02-18':'春节',
+    '04-02':'清明节','04-03':'清明节','04-04':'清明节',
+    '04-29':'劳动节','04-30':'劳动节','05-01':'劳动节','05-02':'劳动节','05-03':'劳动节',
+    '06-15':'端午节','06-16':'端午节','06-17':'端午节',
+    '09-21':'中秋节','09-22':'中秋节','09-23':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
   }
 };
 var MAKEUP = {
@@ -566,6 +595,77 @@ var MAKEUP = {
   '2025':['01-26','02-08','04-27','09-28','10-11'],
   '2026':['01-04','02-14','02-28','05-09','09-20','10-10']
 };
+
+/* 法定节假日「当天」——只有这些日子上班才拿 3 倍。
+ * 假期内的其余日子（落在 HOLI_OFF 里但不是当天）上班按 2 倍，与周末同档。
+ * 依据：《全国年节及纪念日放假办法》(2025-01-01 起施行) + 人社部 300%/200% 口径。
+ *   2025 口径来源：郑州市人社局政务公开《简明问答：2025年法定节假日工资怎么发？》
+ *     https://public.zhengzhou.gov.cn/D3603Y/9134461.jhtml
+ *   2026 春节当天：除夕 2/16 至正月初三 2/19（官方 3 倍口径表尚未发布，沿用 2025 除夕起 4 天口径）。 */
+var LEGAL_HOLI = {
+  '2024':{
+    '01-01':'元旦',
+    '02-10':'春节','02-11':'春节','02-12':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节',
+    '06-10':'端午节',
+    '09-17':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2025':{
+    '01-01':'元旦',
+    '01-28':'春节','01-29':'春节','01-30':'春节','01-31':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '05-31':'端午节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-06':'国庆节·中秋节'
+  },
+  '2026':{
+    '01-01':'元旦',
+    '02-16':'春节(除夕)','02-17':'春节','02-18':'春节','02-19':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-19':'端午节',
+    '09-25':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  /* 2027 起官方调休通知尚未发布，法定当天按修订后规则推算：
+   * 元旦1天 + 春节除夕~初三4天 + 清明1天 + 劳动节2天 + 端午1天 + 中秋1天 + 国庆3天 = 13天/年。
+   * 与 ios-shell 壳内副本的 HOLI_3X 保持一致；官方通知发布后按实际校正。 */
+  '2027':{
+    '01-01':'元旦',
+    '02-05':'春节(除夕)','02-06':'春节','02-07':'春节','02-08':'春节',
+    '04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-09':'端午节',
+    '09-15':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2028':{
+    '01-01':'元旦',
+    '01-25':'春节(除夕)','01-26':'春节','01-27':'春节','01-28':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '05-28':'端午节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'中秋节'
+  },
+  '2029':{
+    '01-01':'元旦',
+    '02-12':'春节(除夕)','02-13':'春节','02-14':'春节','02-15':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-16':'端午节',
+    '09-22':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  }
+};
+
+/* 是否法定节假日「当天」（3 倍）；假期内其它休息日为 2 倍 */
+function holiCore(dateStr){
+  var p = dateStr.split('-');
+  var t = LEGAL_HOLI[p[0]];
+  return !!(t && t[p[1] + '-' + p[2]]);
+}
 
 /* ---------------- 存储（含无 localStorage 时的内存兜底） ---------------- */
 var _mem = {};
@@ -593,12 +693,43 @@ function setStdMap(m){ storeSet(LS_STD, m); }
 function getThemeKey(){ var t = storeGet(LS_THEME, 'pink'); return THEMES[t] ? t : 'pink'; }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 
+/* ---------- 阻止缩放（手势 + 双指） ---------- */
+function blockGesture(e){ if (e) e.preventDefault(); }
+document.addEventListener('gesturestart', blockGesture, {passive:false});
+document.addEventListener('gesturechange', blockGesture, {passive:false});
+document.addEventListener('gestureend', blockGesture, {passive:false});
+
+/* ---------- 跨域取数：App 内走原生壳，网页里走 fetch ---------- */
+var _nfSeq = 0, _nfCbs = {};
+function nativeFetchOn(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.nativeFetch); }
+window.__nativeFetchResult = function(ok, id, text){
+  var cb = _nfCbs[id];
+  if (cb){ _nfCbs[id] = null; try{ cb(!!ok, String(text||'')); }catch(e){} }
+};
+function apiGetText(url, timeoutMs, cb){
+  cb = cb || function(){};
+  var tms = timeoutMs || 12000;
+  if (nativeFetchOn()){
+    var id = 'nf' + (_nfSeq++);
+    _nfCbs[id] = cb;
+    var send = function(){ try{ window.webkit.messageHandlers.nativeFetch.postMessage({id:id, url:url}); }catch(e){ _nfCbs[id]=null; cb(false,''); } };
+    try{ send(); }catch(e){ _nfCbs[id]=null; cb(false,''); }
+    setTimeout(function(){ if (_nfCbs[id]){ _nfCbs[id]=null; cb(false,''); } }, tms);
+    return;
+  }
+  var ctl = new AbortController();
+  var timer = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, tms);
+  fetch(url, {mode:'cors', signal:ctl.signal})
+    .then(function(r){ clearTimeout(timer); if (!r.ok){ cb(false,''); return; } return r.text().then(function(t){ cb(true,t); }); })
+    .catch(function(){ clearTimeout(timer); cb(false,''); });
+}
+
 /* ---------------- 工具 ---------------- */
 function $(id){ return document.getElementById(id); }
 function esc(s){ s = String(s === undefined || s === null ? '' : s);
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function fmtMoney(v){ v = isFinite(v) ? v : 0; return '¥' + (Math.round(v*100)/100).toFixed(2); }
-function fmtH(v){ v = isFinite(v) ? v : 0; return (Math.round(v*10)/10).toFixed(1); }
+function fmtH(v){ v = isFinite(v) ? v : 0; return (Math.round(v*100)/100).toFixed(2); }
 function pad2(n){ return (n<10?'0':'') + n; }
 function todayStr(){ var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()); }
 function lastDay(y, m){ return new Date(y, m, 0).getDate(); }
@@ -632,20 +763,29 @@ function isHoliOff(dateStr){
   var p = dateStr.split('-'); var off = HOLI_OFF[p[0]] || {}; return !!off[p[1]+'-'+p[2]];
 }
 
-/* 工时拆分 */
+/* 工时拆分
+ * 法定当天(h)        -> 3 倍
+ * 法定假期非当天(w) / 周末(w) -> 2 倍
+ * 工作日 8h 内(n) + 超出平日加班(d) -> 1.5 倍(加班部分) */
 function splitHours(dateStr, type, hours){
   var n=0, d=0, w=0, h=0;
   hours = isFinite(hours) ? +hours : 0;
   if (type === 'work' && hours > 0){
     var c = classify(dateStr).type;
-    if (c === 'holiday'){ h = hours; }
+    if (c === 'holiday'){
+      if (holiCore(dateStr)){ h = hours; }   /* 法定当天 -> 3 倍 */
+      else { w = hours; }                    /* 假期内休息日 -> 2 倍，与周末同档 */
+    }
     else if (c === 'weekend'){ w = hours; }
     else { n = Math.min(hours, 8); d = Math.max(0, hours - 8); }
   }
   return {n:r1(n), d:r1(d), w:r1(w), h:r1(h)};
 }
-function r1(v){ return Math.round(v*10)/10; }
+/* 工时保留两位（与金额口径一致），避免 7.75h 被吞成 7.8h */
+function r1(v){ return Math.round(v*100)/100; }
 function r2(v){ return Math.round(v*100)/100; }
+/* 金额一律保留两位：所有金额类中间值都过这里，避免长小数累积误差 */
+function money2(v){ return isFinite(v) ? Math.round(v*100)/100 : 0; }
 
 /* ---------------- 页面切换 ---------------- */
 var _curPage = 'home';
@@ -791,29 +931,37 @@ function offlineWorkdays(ym){
 function calcMonth(ym){
   var S = getSet();
   var recs = getRecs();
-  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, mealDays:0, absent:0, workRecords:0};
+  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, restOther:0, mealDays:0, absent:0, workRecords:0};
   var hasAbsent = false;
   for (var i=0;i<recs.length;i++){
     var r = recs[i];
     if (!r || r.date.indexOf(ym) !== 0) continue;
     if (r.type === 'work'){ sum.normal += (+r.n||0); sum.wd += (+r.d||0); sum.we += (+r.w||0); sum.hol += (+r.h||0); sum.mealDays++; sum.workRecords++; }
-    else if (r.type === 'holiday'){ sum.legalRest++; }
+    else if (r.type === 'holiday'){
+      sum.legalRest++;
+      if (!holiCore(r.date)) sum.restOther++;   /* 假期内休息日（非当天） */
+    }
     else if (r.type === 'absent'){ sum.absent++; hasAbsent = true; }
   }
   sum.effHours = sum.normal + sum.legalRest * 8;
   var std = stdHoursForMonth(ym);
   var ratio = (std > 0) ? Math.min(sum.effHours / std, 1) : (sum.effHours > 0 ? 1 : 0);
-  var hourly = (std > 0) ? S.base / std : S.base / 174;
+  var hourly = (std > 0) ? money2(S.base / std) : money2(S.base / 174);
 
   var m = {};
-  m.base = S.base * ratio;
-  m.post = S.post * ratio;
-  m.perf = S.perf * ratio;
-  m.full = hasAbsent ? 0 : S.full;
-  m.otMoney = sum.wd * hourly * S.ot1 + sum.we * hourly * S.ot2 + sum.hol * hourly * S.ot3;
-  m.meal = Math.min(sum.mealDays * S.meal, S.mealCap);
-  m.social = S.social;
-  m.total = m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social;
+  m.base = money2(S.base * ratio);
+  m.post = money2(S.post * ratio);
+  m.perf = money2(S.perf * ratio);
+  m.full = hasAbsent ? 0 : money2(S.full);
+  /* 三档加班：平日 ot1 / 周末与假期休息日 ot2 / 法定当天 ot3 */
+  var otWd  = money2(sum.wd  * hourly * S.ot1);
+  var otWe  = money2(sum.we  * hourly * S.ot2);
+  var otHol = money2(sum.hol * hourly * S.ot3);
+  m.otWd = otWd; m.otWe = otWe; m.otHol = otHol;
+  m.otMoney = money2(otWd + otWe + otHol);
+  m.meal = money2(Math.min(sum.mealDays * S.meal, S.mealCap));
+  m.social = money2(S.social);
+  m.total = money2(m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social);
   m.ratio = ratio;
   m.std = std;
   m.hourly = hourly;
@@ -836,13 +984,14 @@ function refreshHome(){
     var dayNoun = '（本月尚未打卡，可用「补卡」快速补齐）';
     if (su.workRecords + su.legalRest + su.absent > 0){
       dayNoun = '上班 ' + su.workRecords + ' 天 · 法定休息 ' + su.legalRest + ' 天 · 缺勤 ' + su.absent + ' 天';
+      if (su.restOther > 0) dayNoun += '（含假期休息日 ' + su.restOther + ' 天）';
     }
     $('totalLbl').textContent = ymLabel(_curYM) + ' 总收入';
     if (m.recCount === 0){
       $('totalMoney').innerHTML = '<small>¥</small>0.00';
       $('totalMeta').textContent = '本月暂无记录 · 打卡/补卡后自动计算';
     } else {
-      $('totalMoney').innerHTML = '<small>¥</small>' + (Math.round(m.total*100)/100).toFixed(2);
+      $('totalMoney').innerHTML = '<small>¥</small>' + m.total.toFixed(2);
       $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h / 标准 ' + m.std + 'h';
     }
 
@@ -853,9 +1002,9 @@ function refreshHome(){
     inc += rowHtml('绩效奖金', fmtMoney(m.perf));
     inc += rowHtml('全勤奖' + (su.absent>0 ? '（有缺勤→0）' : ''), fmtMoney(m.full), su.absent>0?'':'green');
     inc += rowHtml('加班工资', fmtMoney(m.otMoney));
-    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h', fmtMoney(su.wd*m.hourly*S.ot1), 'muted');
-    inc += rowHtml('　· 周末加班 ' + fmtH(su.we) + 'h', fmtMoney(su.we*m.hourly*S.ot2), 'muted');
-    inc += rowHtml('　· 节假日加班 ' + fmtH(su.hol) + 'h', fmtMoney(su.hol*m.hourly*S.ot3), 'muted');
+    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h × ' + S.ot1, fmtMoney(m.otWd), 'muted');
+    inc += rowHtml('　· 周末/假期休息日 ' + fmtH(su.we) + 'h × ' + S.ot2, fmtMoney(m.otWe), 'muted');
+    inc += rowHtml('　· 法定当天 ' + fmtH(su.hol) + 'h × ' + S.ot3, fmtMoney(m.otHol), 'muted');
     inc += rowHtml('餐补（' + su.mealDays + '天 × ' + S.meal + '，上限' + S.mealCap + '）', fmtMoney(m.meal));
     inc += rowHtml('社保扣除', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
     inc += rowHtml('当月总收入', fmtMoney(m.total), 'green');
@@ -872,13 +1021,13 @@ function refreshHome(){
     hs += rowHtml('法定休息折算（' + su.legalRest + '天×8h）', fmtH(su.legalRest*8) + ' h');
     hs += rowHtml('有效出勤工时', fmtH(su.effHours) + ' h');
     hs += rowHtml('平日加班', fmtH(su.wd) + ' h');
-    hs += rowHtml('周末加班', fmtH(su.we) + ' h');
-    hs += rowHtml('节假日加班', fmtH(su.hol) + ' h');
+    hs += rowHtml('周末/假期休息日加班', fmtH(su.we) + ' h');
+    hs += rowHtml('法定当天加班', fmtH(su.hol) + ' h');
     hs += rowHtml('加班总工时', fmtH(otH) + ' h');
     hs += rowHtml('上班天数', su.workRecords + ' 天');
     hs += rowHtml('缺勤天数', su.absent + ' 天');
     $('hoursRows').innerHTML = hs;
-    var hh = '按「工作日8h内正常/超出平日加班，周末2倍，节假日3倍」拆分；'
+    var hh = '按「工作日8h内正常/超出平日加班(1.5倍)，周末与法定假期休息日(2倍)，法定当天(3倍)」拆分；'
       + (offlineWorkdays(_curYM) > 0 ? '本月工作日(内置含调休)约 ' + offlineWorkdays(_curYM) + ' 天。' : '');
     $('hoursHint').textContent = hh;
 
@@ -998,8 +1147,12 @@ function punchChanged(){
     var c = classify(ds);
     $('pCat').textContent = punchCatText(ds);
     var note = '';
-    if (c.type==='holiday') note = '当天为法定节假日：上班计 3 倍节假日加班';
-    else if (c.type==='weekend') note = '当天为周末：上班全部计周末加班（2 倍），不计正常出勤';
+    if (c.type==='holiday'){
+      note = holiCore(ds)
+        ? '当天为法定节假日当天：上班计 ' + getSet().ot3 + ' 倍'
+        : '当天在法定假期内但不是当天：上班计 ' + getSet().ot2 + ' 倍（与周末同档）';
+    }
+    else if (c.type==='weekend') note = '当天为周末：上班全部计周末加班（' + getSet().ot2 + ' 倍），不计正常出勤';
     else note = '当天为工作日：8h 内正常出勤，超出部分计平日加班';
     $('pCatNote').textContent = note;
     /* 新建且未手动选类型时，跟随日期类别自动建议 */
@@ -1014,8 +1167,8 @@ function punchChanged(){
       var parts = [];
       if (sp.n>0) parts.push('正常出勤 ' + fmtH(sp.n) + 'h');
       if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（1.5倍）');
-      if (sp.w>0) parts.push('周末加班 ' + fmtH(sp.w) + 'h（2倍）');
-      if (sp.h>0) parts.push('节假日加班 ' + fmtH(sp.h) + 'h（3倍）');
+      if (sp.w>0) parts.push((isHoliOff(ds) ? '法定假期休息日加班 ' : '周末加班 ') + fmtH(sp.w) + 'h（2倍）');
+      if (sp.h>0) parts.push('法定当天加班 ' + fmtH(sp.h) + 'h（3倍）');
       pv.textContent = '将记入：' + (parts.length?parts.join(' + '):'0h（请确认工时）');
     } else if (_curType === 'holiday'){
       pv.textContent = '法定节假日休息：按 8h 计入有效出勤，享有底薪（比例按底薪折算），不影响全勤。';
@@ -1423,7 +1576,7 @@ function saveSettings(){
   try{
     function gv(id, dflt){ var v = parseFloat(($(id).value || '').toString().replace(',', '.')); return isFinite(v) ? v : dflt; }
     var s = {
-      base: Math.max(0, gv('sBase', 2520)),
+      base: Math.max(0, gv('sBase', 2700)),
       ot1:  Math.max(0, gv('sOT1', 1.5)),
       ot2:  Math.max(0, gv('sOT2', 2)),
       ot3:  Math.max(0, gv('sOT3', 3)),
