@@ -1001,7 +1001,7 @@ function calcMonth(ym){
   var hourly = (stdOt > 0) ? (base / stdOt) : (base / 174);
 
   var m = {};
-  m.base = money2(S.base * ratio);
+  m.base = money2(base * ratio);
   m.post = money2(S.post * ratio);
   m.perf = money2(S.perf * ratio);
   m.full = hasAbsent ? 0 : money2(S.full);
