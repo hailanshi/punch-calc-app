@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -17,7 +17,9 @@
   --danger:#e0526a;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:rgba(0,0,0,0);}
-html,body{height:100%; margin:0; padding:0;}
+html,body{height:100%; margin:0; padding:0;
+  touch-action:manipulation; overscroll-behavior-y:contain;}
+input,textarea,select{font-size:16px;}  /* 避免 iOS 点击输入框触发自动缩放 */
 body{
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   color:var(--ink); background:var(--soft); font-size:15px; line-height:1.5;
@@ -259,11 +261,8 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         </div>
         <div class="field">
           <label>打卡类型</label>
-          <div class="typeRow" id="typeRow">
-            <button type="button" class="typeItem" data-t="work" onclick="window.pickType('work')"><div class="nm">上班打卡</div><div class="ds">计正常工时+加班</div></button>
-            <button type="button" class="typeItem" data-t="holiday" onclick="window.pickType('holiday')"><div class="nm">法定节假日休息</div><div class="ds">享底薪·计8小时</div></button>
-            <button type="button" class="typeItem" data-t="rest" onclick="window.pickType('rest')"><div class="nm">普通休息</div><div class="ds">无底薪·不影响全勤</div></button>
-            <button type="button" class="typeItem" data-t="absent" onclick="window.pickType('absent')"><div class="nm">缺勤</div><div class="ds">无底薪·全勤清零</div></button>
+          <div style="background:var(--soft2);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink2);">
+            <b style="color:var(--main-deep);">上班打卡</b>　法定节假日休息 / 普通休息 / 缺勤 会根据当天日期自动判定，无需手动选。
           </div>
         </div>
         <div class="field" id="hoursField">
@@ -286,9 +285,15 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
       <div class="card pad">
         <div style="font-weight:700;font-size:15px;margin-bottom:4px;">自动补卡</div>
-        <div style="font-size:12px;color:var(--ink3);margin-bottom:10px;">默认工时 <span id="autoHrInfo">11</span> 小时（8正常 + 3平日加班），跳过周末、法定节假日和已有记录的日期，点击直接执行、无需确认。</div>
-        <button type="button" class="btn soft block" style="margin-bottom:8px;" onclick="window.backfillToday()">① 补卡到今天</button>
-        <button type="button" class="btn soft block" onclick="window.backfillAll()">② 本月全部补卡</button>
+        <div style="font-size:12px;color:var(--ink3);margin-bottom:8px;">选择要补的月份，再点按钮；跳过周末、法定节假日和已有记录的日期，点击直接执行。</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <select id="bfYear" onchange="window.bfYearChange()" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;-webkit-appearance:none;color:var(--ink);"></select>
+          <select id="bfMonth" onchange="window.bfYearChange()" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;-webkit-appearance:none;color:var(--ink);"></select>
+        </div>
+        <div class="hint" style="margin-bottom:8px;" id="bfHint">—</div>
+        <div class="hint" style="margin-bottom:10px;">默认工时 <span id="autoHrInfo">11</span> 小时（8正常 + 3平日加班）· 该月标准工时按「该月工作日×8」自动算，联网更新可校正。</div>
+        <button type="button" class="btn soft block" style="margin-bottom:8px;" onclick="window.backfillToday()">① 补卡到这个月（到今日）</button>
+        <button type="button" class="btn soft block" onclick="window.backfillAll()">② 补卡整个月</button>
       </div>
     </div>
   </section>
@@ -315,6 +320,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <button type="button" class="chip" onclick="window.exportRecs('all')">导出全部</button>
         <button type="button" class="chip" onclick="window.pickImport('append')">导入·追加</button>
         <button type="button" class="chip" onclick="window.pickImport('overwrite')">导入·覆盖</button>
+        <button type="button" class="chip" onclick="window.askDeleteMonth()">删除当月</button>
         <button type="button" class="chip" onclick="window.askDeleteAllRecords()">删除全部</button>
       </div>
 
@@ -365,9 +371,9 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <button type="button" class="accHead on" data-g="g2" onclick="window.toggleAcc(this)">加班时薪倍数<span class="chev">▶</span></button>
         <div class="accBody on" id="acc-g2">
           <div class="field"><label>平日加班（倍）</label><input type="number" id="sOT1" step="0.1" min="1"></div>
-          <div class="field"><label>周末 / 法定假期休息日（倍）</label><input type="number" id="sOT2" step="0.1" min="1"></div>
-          <div class="field"><label>法定节假日当天（倍）</label><input type="number" id="sOT3" step="0.1" min="1"></div>
-          <div class="unit" style="margin-top:-4px;">时薪 = 底薪 ÷ 每月标准工时；只有法定节假日<b>当天</b>按上面第 3 档算，假期内的其它休息日按第 2 档（与周末同档）。</div>
+          <div class="field"><label>周末加班（倍）</label><input type="number" id="sOT2" step="0.1" min="1"></div>
+          <div class="field"><label>法定节假日加班（倍）</label><input type="number" id="sOT3" step="0.1" min="1"></div>
+          <div class="unit" style="margin-top:-4px;">时薪 = 底薪 ÷ 每月标准工时；加班按对应倍数计算。</div>
         </div>
       </div>
 
@@ -429,15 +435,15 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     <div class="scroll">
       <div class="card pad helpSec">
         <h3>📌 功能简介</h3>
-        <p>打卡工资计算器：支持上班打卡、法定节假日休息、普通休息、缺勤四种记录；自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 法定当天三档加班；按设定参数自动计算当月工资。所有数据保存在本机浏览器存储中，无需服务器。</p>
+        <p>打卡工资计算器：界面只保留「上班打卡」一种记录，录入每天上班工时即可；法定节假日休息、普通休息、缺勤都会根据当天日期与是否打卡<b>自动判定</b>。自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 节假日加班；按设定参数自动计算当月工资。所有数据保存在本机，无需服务器。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🕐 工时判定规则</h3>
-        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>。<br>
-        2. 周六、周日上班：全部工时计为<b>周末加班</b>，不计正常出勤。<br>
-        3. 法定节假日上班：<b>法定当天</b>全部工时计 3 倍加班；<b>假期内的非当天休息日</b>全部工时计 2 倍加班（与周末同档）。两种都不计正常出勤。<br>
-        4. 法定节假日休息：视为出勤，按 8 小时计入有效出勤工时，享有底薪；普通休息无底薪、不影响全勤；缺勤则当月全勤清零。</p>
-        <p>自动补卡只填充工作日；周末、法定节假日、已有记录的日期自动跳过。内置 2024–2026 国务院放假安排（含调休上班日），可与「设置 → 联网更新」交叉校验每月工作日。</p>
+        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班（1.5 倍）</b>。<br>
+        2. 周末上班：全部工时计为<b>周末加班（2 倍）</b>，不计正常出勤。<br>
+        3. <b>法定节假日当天</b>上班：全部工时计<b>节假日加班（3 倍）</b>。注意：只有国家强制三倍工资的法定节假日当天才算 3 倍（元旦 1 天、春节除夕+初一~初三 4 天、清明 1 天、劳动节 2 天、端午 1 天、中秋 1 天、国庆 3 天，共 13 天/年）；同一次放假的<b>连休日</b>属休息日，上班按 2 倍计。<br>
+        4. 未打卡的日期自动判定：<b>法定节假日→休息</b>(按 8h 计入有效出勤、享有底薪)；<b>周末 / 放假连休日→普通休息</b>(无底薪、不影响全勤)；<b>工作日→缺勤</b>(当月全勤清零)。当月未来日期暂不算缺勤。</p>
+        <p>自动补卡只填充工作日；周末、法定节假日、放假连休日、已有记录的日期自动跳过。内置 2026–2029 节假日（调休补班日待官方发布后可用「联网更新」校正）；每月标准工时＝该月工作日×8，各月不同。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🧮 工资计算公式</h3>
@@ -446,17 +452,16 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <p><b>出勤比例</b> = min(有效出勤工时 ÷ 每月标准工时, 1)</p>
         <p>底薪 / 岗位补贴 / 绩效奖金 均乘以出勤比例；缺勤则全勤奖为 0，否则全额发放。</p>
         <p><b>时薪</b> = 底薪 ÷ 每月标准工时<br>
-        <b>加班工资</b> = 平日加班 × 时薪×平日倍数 + 周末加班 × 时薪×周末倍数 + 法定当天加班 × 时薪×法定倍数<br>
-        <b>注意</b>：只有<b>法定节假日当天</b>上班才是 3 倍；假期内其余休息日（但不是当天）上班按 2 倍算，与周末同档。</p>
+        <b>加班工资</b> = 平日加班 × 时薪×平日倍数 + 周末加班 × 时薪×周末倍数 + 节假日加班 × 时薪×节假日倍数</p>
         <p><b>餐补</b> = min(上班打卡天数 × 每日餐补, 餐补上限)；社保为固定扣除。</p>
       </div>
       <div class="card pad helpSec">
         <h3>⚙️ 默认参数一览</h3>
-        <p>底薪 2700 元 · 平日加班 1.5 倍 · 周末加班 2 倍 · 法定当天 3 倍（假期内休息日 2 倍）· 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 每月标准工时默认 174 小时（联网更新后按当月工作日×8 自动计算）· 自动补卡工时 11 小时。</p>
+        <p>底薪 2700 元 · 平日加班 1.5 倍 · 周末加班 2 倍 · 法定节假日 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 每月标准工时＝该月工作日×8 · 自动补卡工时 11 小时。</p>
       </div>
       <div class="card pad helpSec">
         <h3>📋 记录导出格式</h3>
-        <div class="fx">日期|类型|上班工时|正常工时|平日加班|周末加班|法定当天加班|是否节假日|是否周末|备注</div>
+        <div class="fx">日期|类型|上班工时|正常工时|平日加班|周末加班|节假日加班|是否节假日|是否周末|备注</div>
         <p style="margin-top:6px;">类型：work=上班打卡，holiday=法定节假日休息，rest=普通休息，absent=缺勤。支持追加 / 覆盖两种导入模式。</p>
       </div>
       <div class="card pad helpSec">
@@ -534,11 +539,11 @@ var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:�
 var DEFAULTS = {
   base:2700, ot1:1.5, ot2:2, ot3:3, social:420, full:100, perf:50, post:400,
   meal:15, mealCap:360, std:174, auto:11,
-  stdOt:174,        /* 加班时薪分母（固定值）。工资条校验点：平时单价 = stdOt的时薪 × 1.5 */
+  stdOt:174,        /* 加班时薪分母（固定值）。工资条校验点：平时单价 = 底薪÷stdOt × 1.5 */
   stdBase:'monthly', /* 底薪折算分母：'monthly'=当月排班工时(工作日×8)；'fixed'=用 std */
   taxOn:false,      /* 是否计算个税 */
   taxThr:5000,      /* 个税起征点（月） */
-  taxRate:0.03      /* 个税税率；应纳税所得额超过本档上限时会给出提示 */
+  taxRate:0.03      /* 个税税率；应纳税所得额超 3000 时会提示需按年表分档 */
 };
 
 var TYPE_META = {
@@ -559,22 +564,6 @@ var THEMES = {
 /* 内置法定节假日：off=放假日期(官方安排整段)，makeup=调休补班日期(周末上班)
  * 数据来源：国务院办公厅 2024 / 2025 / 2026 部分节假日安排。 */
 var HOLI_OFF = {
-  '2024':{
-    '01-01':'元旦','02-10':'春节','02-11':'春节','02-12':'春节','02-13':'春节','02-14':'春节','02-15':'春节','02-16':'春节','02-17':'春节',
-    '04-04':'清明节','04-05':'清明节','04-06':'清明节',
-    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
-    '06-08':'端午节','06-09':'端午节','06-10':'端午节',
-    '09-15':'中秋节','09-16':'中秋节','09-17':'中秋节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
-  },
-  '2025':{
-    '01-01':'元旦',
-    '01-28':'春节','01-29':'春节','01-30':'春节','01-31':'春节','02-01':'春节','02-02':'春节','02-03':'春节','02-04':'春节',
-    '04-04':'清明节','04-05':'清明节','04-06':'清明节',
-    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
-    '05-31':'端午节','06-01':'端午节','06-02':'端午节',
-    '10-01':'国庆节·中秋节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'中秋节','10-07':'国庆节','10-08':'国庆节'
-  },
   '2026':{
     '01-01':'元旦','01-02':'元旦','01-03':'元旦',
     '02-15':'春节','02-16':'春节','02-17':'春节','02-18':'春节','02-19':'春节','02-20':'春节','02-21':'春节','02-22':'春节','02-23':'春节',
@@ -584,77 +573,8 @@ var HOLI_OFF = {
     '09-25':'中秋节','09-26':'中秋节','09-27':'中秋节',
     '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
   },
-  /* 2027-2029 官方调休通知尚未发布：放假区间暂按「法定当天 + 相邻周末」的保守口径列示，
-   * 调休补班日待官方通知发布后用「联网更新」校正；法定当天以 LEGAL_HOLI 为准，不受这里影响。 */
-  '2027':{
-    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
-    '02-05':'春节','02-06':'春节','02-07':'春节','02-08':'春节','02-09':'春节','02-10':'春节','02-11':'春节',
-    '04-03':'清明节','04-04':'清明节','04-05':'清明节',
-    '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
-    '06-09':'端午节','06-10':'端午节','06-11':'端午节',
-    '09-14':'中秋节','09-15':'中秋节','09-16':'中秋节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
-  },
-  '2028':{
-    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
-    '01-25':'春节','01-26':'春节','01-27':'春节','01-28':'春节','01-29':'春节','01-30':'春节','01-31':'春节',
-    '04-02':'清明节','04-03':'清明节','04-04':'清明节',
-    '04-29':'劳动节','04-30':'劳动节','05-01':'劳动节','05-02':'劳动节','05-03':'劳动节',
-    '05-27':'端午节','05-28':'端午节','05-29':'端午节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'中秋节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
-  },
-  '2029':{
-    '01-01':'元旦','01-02':'元旦','01-03':'元旦',
-    '02-12':'春节','02-13':'春节','02-14':'春节','02-15':'春节','02-16':'春节','02-17':'春节','02-18':'春节',
-    '04-02':'清明节','04-03':'清明节','04-04':'清明节',
-    '04-29':'劳动节','04-30':'劳动节','05-01':'劳动节','05-02':'劳动节','05-03':'劳动节',
-    '06-15':'端午节','06-16':'端午节','06-17':'端午节',
-    '09-21':'中秋节','09-22':'中秋节','09-23':'中秋节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节'
-  }
-};
-var MAKEUP = {
-  '2024':['02-04','02-18','04-07','04-28','05-11','09-14','09-29','10-12'],
-  '2025':['01-26','02-08','04-27','09-28','10-11'],
-  '2026':['01-04','02-14','02-28','05-09','09-20','10-10']
-};
-
-/* 法定节假日「当天」——只有这些日子上班才拿 3 倍。
- * 假期内的其余日子（落在 HOLI_OFF 里但不是当天）上班按 2 倍，与周末同档。
- * 依据：《全国年节及纪念日放假办法》(2025-01-01 起施行) + 人社部 300%/200% 口径。
- *   2025 口径来源：郑州市人社局政务公开《简明问答：2025年法定节假日工资怎么发？》
- *     https://public.zhengzhou.gov.cn/D3603Y/9134461.jhtml
- *   2026 春节当天：除夕 2/16 至正月初三 2/19（官方 3 倍口径表尚未发布，沿用 2025 除夕起 4 天口径）。 */
-var LEGAL_HOLI = {
-  '2024':{
-    '01-01':'元旦',
-    '02-10':'春节','02-11':'春节','02-12':'春节',
-    '04-04':'清明节',
-    '05-01':'劳动节',
-    '06-10':'端午节',
-    '09-17':'中秋节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
-  },
-  '2025':{
-    '01-01':'元旦',
-    '01-28':'春节','01-29':'春节','01-30':'春节','01-31':'春节',
-    '04-04':'清明节',
-    '05-01':'劳动节','05-02':'劳动节',
-    '05-31':'端午节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-06':'国庆节·中秋节'
-  },
-  '2026':{
-    '01-01':'元旦',
-    '02-16':'春节(除夕)','02-17':'春节','02-18':'春节','02-19':'春节',
-    '04-04':'清明节',
-    '05-01':'劳动节','05-02':'劳动节',
-    '06-19':'端午节',
-    '09-25':'中秋节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
-  },
-  /* 2027 起官方调休通知尚未发布，法定当天按修订后规则推算：
-   * 元旦1天 + 春节除夕~初三4天 + 清明1天 + 劳动节2天 + 端午1天 + 中秋1天 + 国庆3天 = 13天/年。
-   * 与 ios-shell 壳内副本的 HOLI_3X 保持一致；官方通知发布后按实际校正。 */
+  /* 2027-2029 官方调休通知尚未发布，这里按国务院修订后法定节假日(除夕+初一~初三/清明/五一2天/端午/中秋/国庆3天)标注；
+   * 调休补班工作日会在官方通知发布后通过「联网更新」自动校正。 */
   '2027':{
     '01-01':'元旦',
     '02-05':'春节(除夕)','02-06':'春节','02-07':'春节','02-08':'春节',
@@ -670,7 +590,8 @@ var LEGAL_HOLI = {
     '04-04':'清明节',
     '05-01':'劳动节','05-02':'劳动节',
     '05-28':'端午节',
-    '10-01':'国庆节','10-02':'国庆节','10-03':'中秋节'
+    '10-03':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
   },
   '2029':{
     '01-01':'元旦',
@@ -682,13 +603,51 @@ var LEGAL_HOLI = {
     '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
   }
 };
+var MAKEUP = {
+  '2026':['01-04','02-14','02-28','05-09','09-20','10-10']
+};
 
-/* 是否法定节假日「当天」（3 倍）；假期内其它休息日为 2 倍 */
-function holiCore(dateStr){
-  var p = dateStr.split('-');
-  var t = LEGAL_HOLI[p[0]];
-  return !!(t && t[p[1] + '-' + p[2]]);
-}
+/* 法定节假日（国家强制三倍工资的当天）：
+ * 元旦1天、春节除夕+初一~初三共4天、清明1天、劳动节5/1~5/2共2天、端午1天、中秋1天、国庆10/1~10/3共3天 = 13天/年。
+ * 其余「放假连休日」只是休息日（上班按 2 倍），不按 3 倍。 */
+var HOLI_3X = {
+  '2026':{
+    '01-01':'元旦',
+    '02-16':'春节(除夕)','02-17':'春节','02-18':'春节','02-19':'春节',
+    '04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-19':'端午节',
+    '09-25':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2027':{
+    '01-01':'元旦',
+    '02-05':'春节(除夕)','02-06':'春节','02-07':'春节','02-08':'春节',
+    '04-05':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-09':'端午节',
+    '09-15':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2028':{
+    '01-01':'元旦',
+    '01-25':'春节(除夕)','01-26':'春节','01-27':'春节','01-28':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '05-28':'端午节',
+    '10-03':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  },
+  '2029':{
+    '01-01':'元旦',
+    '02-12':'春节(除夕)','02-13':'春节','02-14':'春节','02-15':'春节',
+    '04-04':'清明节',
+    '05-01':'劳动节','05-02':'劳动节',
+    '06-16':'端午节',
+    '09-22':'中秋节',
+    '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节'
+  }
+};
 
 /* ---------------- 存储（含无 localStorage 时的内存兜底） ---------------- */
 var _mem = {};
@@ -707,8 +666,8 @@ function storeSet(k, v){
 }
 function getRecs(){ var a = storeGet(LS_REC, []); return Array.isArray(a) ? a : []; }
 function setRecs(a){ storeSet(LS_REC, a); }
-/* 读取设置：数值字段取数字；非数值字段（如 stdBase / taxOn / 布尔与枚举）原样继承，
- * 否则它们会被 isFinite 过滤掉，导致「计算个税」等开关存了也不生效。 */
+/* 读取设置：数值字段取数字；非数值字段（stdBase / taxOn 等布尔与枚举）原样继承，
+ * 否则会被 isFinite 过滤掉，导致「计算个税」这类开关存了也不生效。 */
 function getSet(){
   var s = storeGet(LS_SET, null);
   if (!s) return clone(DEFAULTS);
@@ -791,16 +750,20 @@ function isWeekend(dateStr){
 }
 function monthDays(y, m){ return new Date(y, m, 0).getDate(); }
 
-/* 日期归类：holiday 法定节假日 / weekend 周末 / workday 工作日(含调休上班日) */
+/* 日期归类：
+ *  holiday      法定节假日（国家强制 3 倍工资的当天）
+ *  holiday_rest 放假连休日（非强制3倍，上班按休息日 2 倍计）
+ *  weekend      周末     workday 工作日(含调休上班日) */
 function classify(dateStr){
   var p = dateStr.split('-'), y = p[0], md = p[1] + '-' + p[2];
-  var off = HOLI_OFF[y] || {};
-  var cust = null;
   var cs = getCustom();
-  for (var i = 0; i < cs.length; i++){ if (cs[i].date === dateStr){ cust = cs[i]; break; } }
-  if (off[md] || cust){
-    return {type:'holiday', name: (cust ? cust.name : (off[md] || '法定节假日'))};
+  for (var i = 0; i < cs.length; i++){
+    if (cs[i].date === dateStr) return {type:'holiday', name: cs[i].name};
   }
+  var t3 = HOLI_3X[y] || {};
+  if (t3[md]) return {type:'holiday', name: t3[md]};
+  var off = HOLI_OFF[y] || {};
+  if (off[md]) return {type:'holiday_rest', name: off[md]};
   var mk = MAKEUP[y] || [];
   if (mk.indexOf(md) >= 0) return {type:'workday', name:''};
   if (isWeekend(dateStr)) return {type:'weekend', name:''};
@@ -811,29 +774,23 @@ function isHoliOff(dateStr){
   var p = dateStr.split('-'); var off = HOLI_OFF[p[0]] || {}; return !!off[p[1]+'-'+p[2]];
 }
 
-/* 工时拆分
- * 法定当天(h)        -> 3 倍
- * 法定假期非当天(w) / 周末(w) -> 2 倍
- * 工作日 8h 内(n) + 超出平日加班(d) -> 1.5 倍(加班部分) */
+/* 工时拆分 */
 function splitHours(dateStr, type, hours){
   var n=0, d=0, w=0, h=0;
   hours = isFinite(hours) ? +hours : 0;
   if (type === 'work' && hours > 0){
     var c = classify(dateStr).type;
-    if (c === 'holiday'){
-      if (holiCore(dateStr)){ h = hours; }   /* 法定当天 -> 3 倍 */
-      else { w = hours; }                    /* 假期内休息日 -> 2 倍，与周末同档 */
-    }
-    else if (c === 'weekend'){ w = hours; }
+    if (c === 'holiday'){ h = hours; }                 // 法定节假日(强制3倍)
+    else if (c === 'holiday_rest'){ w = hours; }       // 放假连休日(休息日2倍)
+    else if (c === 'weekend'){ w = hours; }            // 周末(2倍)
     else { n = Math.min(hours, 8); d = Math.max(0, hours - 8); }
   }
   return {n:r1(n), d:r1(d), w:r1(w), h:r1(h)};
 }
-/* 工时保留两位（与金额口径一致），避免 7.75h 被吞成 7.8h */
+/* 工时与金额一律保留两位，避免 7.75h 被吞成 7.8h、长小数累积误差 */
 function r1(v){ return Math.round(v*100)/100; }
-function r2(v){ return Math.round(v*100)/100; }
-/* 金额一律保留两位：所有金额类中间值都过这里，避免长小数累积误差 */
 function money2(v){ return isFinite(v) ? Math.round(v*100)/100 : 0; }
+function r2(v){ return Math.round(v*100)/100; }
 
 /* ---------------- 页面切换 ---------------- */
 var _curPage = 'home';
@@ -856,6 +813,7 @@ function showPage(name){
   if (nav) nav.style.display = (navPages.indexOf(name) >= 0) ? 'flex' : 'none';
   _curPage = name;
   if (name==='home'){ refreshHome(); }
+  if (name==='punch'){ bfPopulate(); }
   if (name==='records'){ refreshRecords(); }
   if (name==='settings'){ renderSettings(); }
   if (name==='holidays'){ renderHolidays(); }
@@ -940,31 +898,31 @@ function setBanner(text){
 function loadBanner(){
   setBanner(bannerText());
   try{
-    var ctl = new AbortController();
-    var timer = setTimeout(function(){ try{ctl.abort();}catch(e){} }, 8000);
-    fetch('https://uapis.cn/api/v1/social/qq/userinfo?qq=3126473', {signal:ctl.signal})
-      .then(function(r){ return r.json(); })
-      .then(function(j){
-        clearTimeout(timer);
-        var nick = j.nick || j.nickname || j.name || '';
-        var sign = j.sign || j.signature || j.long_nick || j.qmd || j.motto || '';
-        var t;
-        if (nick){
-          t = '🐧 ' + nick + (sign ? ' · ' + sign : ' · 今天也要元气满满地打卡') ;
-        } else {
-          t = bannerText();
-        }
-        setBanner(t);
-      })
-      .catch(function(){ clearTimeout(timer); /* 保持欢迎语 */ });
+    var ctl = function(){};
+    apiGetText('https://uapis.cn/api/v1/social/qq/userinfo?qq=3126473', 9000, function(ok, text){
+      if (!ok || !text){ /* 保持欢迎语 */ return; }
+      var j;
+      try{ j = JSON.parse(text); }catch(e){ return; }
+      if (!j) return;
+      var nick = j.nick || j.nickname || j.name || '';
+      var sign = j.sign || j.signature || j.long_nick || j.qmd || j.motto || '';
+      var t;
+      if (nick){
+        t = '🐧 ' + nick + (sign ? ' · ' + sign : ' · 今天也要元气满满地打卡') ;
+      } else {
+        t = bannerText();
+      }
+      setBanner(t);
+    });
   }catch(e){}
 }
 
 /* ---------------- 首页：月统计 + 工资 ---------------- */
 /* 两个分母，各管一件事（公司工资条就是这样拆的）：
- *   stdBase（底薪折算分母）: 当月排班工时 = 工作日 × 8（8月=168），或固定值
- *   stdOt  （加班时薪分母）: 固定值，默认 174 = 21.75天 × 8（《劳动法》月计薪天数）
- * 实证：工资条「应出勤工时 168」用于出勤比例与底薪；加班单价 21.7241 = 2520÷174×1.5 */
+ *   baseDiv（底薪折算分母）: 当月排班工时 = 工作日 × 8（8月=168），或设置里的固定值
+ *   otDiv  （加班时薪分母）: 固定值，默认 174 = 21.75天 × 8（《劳动法》月计薪天数）
+ * 实证：工资条「应出勤工时 168」用于出勤比例与底薪；
+ *       加班单价 21.7241 = 2520 ÷ 174 × 1.5 —— 两者分母不同，不能混用。 */
 function stdInfo(ym){
   var map = getStdMap();
   var s = getSet();
@@ -974,15 +932,15 @@ function stdInfo(ym){
   if (s.stdBase === 'fixed'){ monthly = (s.std > 0) ? s.std : 174; }
   return { baseDiv: monthly, otDiv: otDiv, monthly: monthly, workdays: workdays, netStd: map[ym] || null };
 }
-/* 兼容旧调用（历史上这个函数只返回一个"标准工时"）。加班时薪分母沿用旧语义。 */
+/* 兼容旧调用：历史上这个函数只返回一个"标准工时"，语义等同加班时薪分母 */
 function stdHoursForMonth(ym){ return stdInfo(ym).otDiv; }
 
 /* ---------------- 个税（单月算法，与 Excel 一致） ----------------
  * 应纳税所得额 = 应发工资 − 个人社保 − 起征点
- * 个税 = max(0, 应纳税所得额) × 税率        ← 与 工资计算.xlsx 的
+ * 个税 = max(0, 应纳税所得额) × 税率   ← 与 工资计算.xlsx 的
  *        =MAX((D9-B17-5000)*0.03,0) 完全一致
- * 注意：这是单月口径（非累计预扣法）。应纳税所得额超过 3000 时已进入 10% 档，
- *       本计算器只用单一税率，会偏低，此时界面会给出提示。 */
+ * 注意：单月口径（非累计预扣法）。应纳税所得额超 3000 时已进入 10% 档，
+ *       本计算器只用单一税率会偏低，界面会提示。 */
 function taxFor(taxBase, S){
   if (!S || !S.taxOn) return 0;
   var thr = isFinite(S.taxThr) ? S.taxThr : 5000;
@@ -1008,52 +966,38 @@ function offlineWorkdays(ym){
 function calcMonth(ym){
   var S = getSet();
   var recs = getRecs();
-  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, restOther:0, mealDays:0, absent:0, workRecords:0};
-  var hasAbsent = false;
-  var autoHoliday = 0;   /* 未打卡但属法定休息（自动折算底薪） */
-  /* 按日遍历：有记录按记录算；无记录则自动判定
-   *   法定当天      -> 计入法定休息（享底薪）
-   *   假期连休/周末  -> 普通休息，不影响工资
-   *   工作日无记录  -> 计缺勤（漏一天也算，全勤奖清零）
-   *   当月未来日期  -> 先不算缺勤（那天还没到） */
   var recMap = {};
-  for (var i=0;i<recs.length;i++){ var rr = recs[i]; if (rr && rr.date.indexOf(ym) === 0) recMap[rr.date] = rr; }
-  var ymp = ymParts(ym);
-  var dim = monthDays(ymp.y, ymp.m);
-  var isCurMonth = (ym === ymNow());
+  for (var i=0;i<recs.length;i++){ var r = recs[i]; if (r && r.date.indexOf(ym) === 0) recMap[r.date] = r; }
+  var p = ymParts(ym);
+  var total = monthDays(p.y, p.m);
   var today = todayStr();
-  for (var day=1; day<=dim; day++){
+  var isCur = (ym === ymNow());
+  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, mealDays:0, absent:0, workRecords:0};
+  var hasAbsent = false;
+  for (var day=1; day<=total; day++){
     var ds = ym + '-' + pad2(day);
     var r = recMap[ds];
     if (r){
       if (r.type === 'work'){ sum.normal += (+r.n||0); sum.wd += (+r.d||0); sum.we += (+r.w||0); sum.hol += (+r.h||0); sum.mealDays++; sum.workRecords++; }
-      else if (r.type === 'holiday'){
-        sum.legalRest++;
-        if (!holiCore(ds)) sum.restOther++;     /* 假期内休息日（非当天） */
-      }
+      else if (r.type === 'holiday'){ sum.legalRest++; }
       else if (r.type === 'absent'){ sum.absent++; hasAbsent = true; }
       continue;
     }
-    if (isCurMonth && ds > today) continue;     /* 当月未来日子不算缺勤 */
-    var ct = classify(ds).type;
-    if (ct === 'holiday'){
-      sum.legalRest++;
-      autoHoliday++;
-      if (!holiCore(ds)) sum.restOther++;
-    }
-    else if (ct === 'weekend' || isHoliOff(ds)){ /* 普通休息，不影响工资 */ }
-    else { sum.absent++; hasAbsent = true; }     /* 工作日没打卡 = 缺勤 */
+    /* 无打卡记录 → 自动判定：法定节假日休息 / 普通休息(周末·放假连休) / 缺勤(工作日) */
+    if (isCur && ds > today) continue;   // 当月未来日子先不算缺勤
+    var c = classify(ds);
+    if (c.type === 'holiday'){ sum.legalRest++; }
+    else if (c.type === 'holiday_rest' || c.type === 'weekend'){ /* 普通休息，不影响工资 */ }
+    else { sum.absent++; hasAbsent = true; }
   }
-  sum.autoHoliday = autoHoliday;
   sum.effHours = sum.normal + sum.legalRest * 8;
   var si = stdInfo(ym);
-  var stdBase = si.baseDiv;                 /* 底薪/补贴/绩效 的出勤比例分母 */
-  var stdOt   = si.otDiv;                   /* 加班时薪分母 */
+  var stdBase = si.baseDiv;    /* 底薪/补贴/绩效 的出勤比例分母 */
+  var stdOt   = si.otDiv;      /* 加班时薪分母 */
   var ratio = (stdBase > 0) ? Math.min(sum.effHours / stdBase, 1) : (sum.effHours > 0 ? 1 : 0);
-  /* 时薪保留完整精度参与运算：公司是"逐项算完再四舍五入"，
-   * 若先把时薪取整会累积误差（2520÷174=14.482759，取整成14.48 会让 60h 加班少 0.25 元）。
-   * 做法与公司工资条一致：每个金额项各自 round 到分后相加。 */
-  var base = baseFor(ym, S);            /* 底薪按月：该月锁定的值优先 */
+  /* 时薪保留完整精度：公司是"逐项算完再四舍五入"。若先把时薪取整会累积误差
+   * （2520÷174 = 14.482759，取整成 14.48 会让 60h 加班少 0.25 元）。 */
+  var base = baseFor(ym, S);           /* 底薪按月：该月锁定的值优先 */
   var hourly = (stdOt > 0) ? (base / stdOt) : (base / 174);
 
   var m = {};
@@ -1142,13 +1086,13 @@ function refreshHome(){
     hs += rowHtml('法定休息折算（' + su.legalRest + '天×8h）', fmtH(su.legalRest*8) + ' h');
     hs += rowHtml('有效出勤工时', fmtH(su.effHours) + ' h');
     hs += rowHtml('平日加班', fmtH(su.wd) + ' h');
-    hs += rowHtml('周末/假期休息日加班', fmtH(su.we) + ' h');
-    hs += rowHtml('法定当天加班', fmtH(su.hol) + ' h');
+    hs += rowHtml('周末加班', fmtH(su.we) + ' h');
+    hs += rowHtml('节假日加班', fmtH(su.hol) + ' h');
     hs += rowHtml('加班总工时', fmtH(otH) + ' h');
     hs += rowHtml('上班天数', su.workRecords + ' 天');
     hs += rowHtml('缺勤天数', su.absent + ' 天');
     $('hoursRows').innerHTML = hs;
-    var hh = '按「工作日8h内正常/超出平日加班(1.5倍)，周末与法定假期休息日(2倍)，法定当天(3倍)」拆分；'
+    var hh = '按「工作日8h内正常/超出平日加班，周末2倍，节假日3倍」拆分；'
       + (offlineWorkdays(_curYM) > 0 ? '本月工作日(内置含调休)约 ' + offlineWorkdays(_curYM) + ' 天。' : '');
     $('hoursHint').textContent = hh;
 
@@ -1205,18 +1149,19 @@ function autoSuggestType(dateStr){
 }
 function punchCatText(dateStr){
   var c = classify(dateStr);
-  if (c.type === 'holiday') return '法定节假日 · ' + c.name;
-  if (c.type === 'weekend') return '周末';
-  return '工作日';
+  if (c.type === 'holiday') return '法定节假日(3倍) · ' + c.name;
+  if (c.type === 'holiday_rest') return '放假连休日(2倍) · ' + c.name;
+  if (c.type === 'weekend') return '周末(2倍)';
+  return '工作日(1.5倍加班)';
 }
 function resetPunchForm(){
   _editDate = '';
-  _manualType = false;
+  _manualType = true;   // 只保留“上班打卡”，不自动切换类型
   var t = todayStr();
   var dEl = $('pDate'); if (dEl) dEl.value = t;
   $('pNote').value = '';
   $('pHours').value = 8;
-  _curType = autoSuggestType(t);
+  _curType = 'work';
   pickTypeUI(_curType);
   $('punchTitle').textContent = '上班打卡';
   $('savePunchBtn').textContent = '保存打卡';
@@ -1250,12 +1195,17 @@ function pickType(t){
   punchChanged();
 }
 function pickTypeUI(t){
-  var row = $('typeRow');
-  var btns = row.querySelectorAll('.typeItem');
-  for (var i=0;i<btns.length;i++){
-    btns[i].className = 'typeItem' + (btns[i].getAttribute('data-t')===t ? ' on' : '');
-  }
-  $('hoursField').style.display = (t==='work') ? 'block' : 'none';
+  try{
+    var row = $('typeRow');
+    if (row){
+      var btns = row.querySelectorAll('.typeItem');
+      for (var i=0;i<btns.length;i++){
+        btns[i].className = 'typeItem' + (btns[i].getAttribute('data-t')===t ? ' on' : '');
+      }
+    }
+    var hf = $('hoursField');
+    if (hf) hf.style.display = (t==='work') ? 'block' : 'none';
+  }catch(e){}
 }
 function setHours(v){
   $('pHours').value = v;
@@ -1268,19 +1218,11 @@ function punchChanged(){
     var c = classify(ds);
     $('pCat').textContent = punchCatText(ds);
     var note = '';
-    if (c.type==='holiday'){
-      note = holiCore(ds)
-        ? '当天为法定节假日当天：上班计 ' + getSet().ot3 + ' 倍'
-        : '当天在法定假期内但不是当天：上班计 ' + getSet().ot2 + ' 倍（与周末同档）';
-    }
-    else if (c.type==='weekend') note = '当天为周末：上班全部计周末加班（' + getSet().ot2 + ' 倍），不计正常出勤';
+    if (c.type==='holiday') note = '当天为法定节假日：上班计 3 倍节假日加班';
+    else if (c.type==='holiday_rest') note = '当天为放假连休日（非法定）：上班按休息日 2 倍计，不计正常出勤';
+    else if (c.type==='weekend') note = '当天为周末：上班全部计周末加班（2 倍），不计正常出勤';
     else note = '当天为工作日：8h 内正常出勤，超出部分计平日加班';
     $('pCatNote').textContent = note;
-    /* 新建且未手动选类型时，跟随日期类别自动建议 */
-    if (!_manualType){
-      var s = autoSuggestType(ds);
-      if (s !== _curType){ _curType = s; pickTypeUI(s); }
-    }
     var hours = parseFloat(($('pHours').value || '0').toString().replace(',', '.'));
     var pv = $('pPreview');
     if (_curType === 'work' && hours > 0){
@@ -1288,8 +1230,8 @@ function punchChanged(){
       var parts = [];
       if (sp.n>0) parts.push('正常出勤 ' + fmtH(sp.n) + 'h');
       if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（1.5倍）');
-      if (sp.w>0) parts.push((isHoliOff(ds) ? '法定假期休息日加班 ' : '周末加班 ') + fmtH(sp.w) + 'h（2倍）');
-      if (sp.h>0) parts.push('法定当天加班 ' + fmtH(sp.h) + 'h（3倍）');
+      if (sp.w>0) parts.push((c.type==='holiday_rest'?'休息日加班 ':'周末加班 ') + fmtH(sp.w) + 'h（2倍）');
+      if (sp.h>0) parts.push('法定节假日加班 ' + fmtH(sp.h) + 'h（3倍）');
       pv.textContent = '将记入：' + (parts.length?parts.join(' + '):'0h（请确认工时）');
     } else if (_curType === 'holiday'){
       pv.textContent = '法定节假日休息：按 8h 计入有效出勤，享有底薪（比例按底薪折算），不影响全勤。';
@@ -1375,22 +1317,56 @@ function punchBack(){
 function cancelPunch(){ _editDate=''; resetPunchForm(); }
 
 /* ---------------- 补卡（无确认，直接执行 + toast） ---------------- */
+var _bfYM = '';   // 补卡选定的月份 YYYY-MM
+function bfPopulate(){
+  var y = $('bfYear'), m = $('bfMonth');
+  if (!y || !m) return;
+  if (!y.options.length){
+    for (var i=2024; i<=2035; i++){ var o = document.createElement('option'); o.value = i; o.textContent = i + '年'; y.appendChild(o); }
+  }
+  if (!m.options.length){
+    for (var j=1; j<=12; j++){ var o2 = document.createElement('option'); o2.value = j; o2.textContent = j + '月'; m.appendChild(o2); }
+  }
+  var now = ymNow(), p = ymParts(now);
+  y.value = p.y; m.value = p.m;
+  bfYearChange();
+}
+function bfReadYM(){
+  var y = $('bfYear'), m = $('bfMonth');
+  if (!y || !m) return '';
+  var mm = (m.value.length < 2 ? ('0' + m.value) : String(m.value));
+  _bfYM = (+y.value) + '-' + mm;
+  return _bfYM;
+}
+function bfYearChange(){
+  var ym = bfReadYM();
+  var hi = $('bfHint');
+  if (hi && ym){
+    var wd = offlineWorkdays(ym);
+    var si = stdInfo(ym);
+    hi.textContent = ymLabel(ym) + '：工作日约 ' + wd + ' 天 → 当月排班 ' + (wd * 8) + 'h（底薪折算分母）；加班时薪分母 ' + si.otDiv + 'h';
+  }
+}
 function backfillBase(ym, uptoToday){
+  if (!ym) ym = ymNow();
   var S = getSet();
   var defH = (S.auto > 0) ? S.auto : 11;
   var p = ymParts(ym);
-  var end = uptoToday ? parseInt(todayStr().split('-')[2], 10) : monthDays(p.y, p.m);
+  var now = ymNow();
+  var isCur = (ym === now);
   var today = todayStr();
+  var end = monthDays(p.y, p.m);
+  if (uptoToday && isCur) end = parseInt(today.split('-')[2], 10);
   var recs = getRecs();
   var map = {};
   for (var i=0;i<recs.length;i++){ map[recs[i].date] = true; }
   var succ=0, skip=0, fail=0;
   for (var day=1; day<=end; day++){
     var ds = ym + '-' + pad2(day);
-    if (uptoToday && ds > today) break;
+    if (uptoToday && isCur && ds > today) break;
     try{
       var c = classify(ds);
-      if (c.type === 'holiday' || c.type === 'weekend'){ skip++; continue; }
+      if (c.type === 'holiday' || c.type === 'holiday_rest' || c.type === 'weekend'){ skip++; continue; }
       if (map[ds]){ skip++; continue; }
       var rec = buildRec(ds, 'work', defH, '自动补卡');
       map[ds] = true;
@@ -1405,15 +1381,14 @@ function backfillBase(ym, uptoToday){
 }
 function backfillToday(){
   try{
-    var now = ymNow();
-    backfillBase(now, true);
+    var ym = bfReadYM() || ymNow();
+    backfillBase(ym, true);
   }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
 function backfillAll(){
   try{
-    /* “本月全部补卡”按当前自然月补齐，与按钮文案一致 */
-    var now = ymNow();
-    backfillBase(now, false);
+    var ym = bfReadYM() || ymNow();
+    backfillBase(ym, false);
   }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
 
@@ -1486,6 +1461,31 @@ function askDeleteAllRecords(){
   var n = getRecs().length;
   if (!n){ toast('当前没有记录可删除'); return; }
   askConfirm('删除全部记录', '将删除全部 ' + n + ' 条打卡记录（所有月份），且不可恢复。确定继续吗？', 'doDeleteAllRecords', null);
+}
+function askDeleteMonth(){
+  try{
+    var n = countMonthRecs(_curYM);
+    if (!n){ toast('本月没有记录可删除'); return; }
+    askConfirm('删除当月记录', '确定删除 ' + ymLabel(_curYM) + ' 的全部 ' + n + ' 条记录吗？', 'doDeleteMonth', {ym:_curYM});
+  }catch(e){ toast('删除失败', 'bad'); }
+}
+function doDeleteMonth(arg){
+  try{
+    var ym = (arg && arg.ym) || _curYM;
+    var old = getRecs(), out = [], n = 0;
+    for (var i=0;i<old.length;i++){
+      if (old[i].date.indexOf(ym) === 0){ n++; continue; }
+      out.push(old[i]);
+    }
+    setRecs(out);
+    toast('已删除 ' + ymLabel(ym) + ' 的 ' + n + ' 条记录', n>0?'good':'');
+    showPage('records');
+  }catch(e){ toast('删除失败：'+ (e&&e.message?e.message:e), 'bad'); }
+}
+function countMonthRecs(ym){
+  var r = getRecs(), c = 0;
+  for (var i=0;i<r.length;i++){ if (r[i].date.indexOf(ym) === 0) c++; }
+  return c;
 }
 function doDeleteAllRecords(){
   try{
@@ -1724,7 +1724,8 @@ function renderTaxHint(){
     + ' − ' + fmtMoney(thr) + ' = 应纳税所得额 ' + fmtMoney(taxable) + ' → 个税 ' + fmtMoney(taxFor(cur.taxBase, S))
     + warn;
 }
-function setBaseDiv(mode){  try{
+function setBaseDiv(mode){
+  try{
     var S = getSet();
     S.stdBase = (mode === 'fixed') ? 'fixed' : 'monthly';
     setSet(S);
@@ -1771,6 +1772,9 @@ function saveSettings(){
       ot2:  Math.max(0, gv('sOT2', 2)),
       ot3:  Math.max(0, gv('sOT3', 3)),
       social: Math.max(0, gv('sSocial', 420)),
+      taxOn: (($('sTaxOn').value === 'on')),
+      taxThr: Math.max(0, gv('sTaxThr', 5000)),
+      taxRate: Math.max(0, gv('sTaxRate', 0.03)),
       full: Math.max(0, gv('sFull', 100)),
       perf: Math.max(0, gv('sPerf', 50)),
       post: Math.max(0, gv('sPost', 400)),
@@ -1779,14 +1783,10 @@ function saveSettings(){
       std: Math.max(1, gv('sStd', 174)),
       stdOt: Math.max(1, gv('sStdOt', 174)),
       stdBase: (getSet().stdBase === 'fixed') ? 'fixed' : 'monthly',
-      taxOn: (($('sTaxOn').value === 'on')),
-      taxThr: Math.max(0, gv('sTaxThr', 5000)),
-      taxRate: Math.max(0, gv('sTaxRate', 0.03)),
       auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
     };
     setSet(s);
-    /* 底薪按月落库：把刚保存的底薪写入「当前查看的月份」，
-     * 这样以后调薪（切到新月份再改）不会改写历史月份的数字。 */
+    /* 底薪按月落库：写入「当前查看的月份」，调薪切月保存后不影响历史月份 */
     var bm = getBaseMap();
     bm[_curYM] = s.base;
     setBaseMap(bm);
@@ -1814,50 +1814,42 @@ function netUpdateStd(){
     if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
     var ym = _curYM;
     var url = 'https://uapis.cn/api/v1/misc/holiday-calendar?month=' + ym;
-    var ctl = new AbortController();
-    var timer = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 12000);
-    fetch(url, {signal:ctl.signal})
-      .then(function(r){ return r.json(); })
-      .then(function(j){
-        clearTimeout(timer);
-        var wd = null;
-        try{
-          if (j && j.summary && isFinite(+j.summary.workdays)) wd = +j.summary.workdays;
-          else if (j && j.data && j.data.summary && isFinite(+j.data.summary.workdays)) wd = +j.data.summary.workdays;
-          else if (j && j.days && Array.isArray(j.days)){
-            var c = 0;
-            for (var i=0;i<j.days.length;i++){ if (j.days[i] && j.days[i].is_workday === true) c++; }
-            if (c > 0) wd = c;
-          }
-        }catch(e){}
-        if (wd === null || wd <= 0){
-          toast('接口未返回有效工作日数，已保留原值', 'bad');
-          return;
+    apiGetText(url, 12000, function(ok, text){
+      if (!ok || !text){ toast('联网更新失败，已保留原数值', 'bad'); resetNetBtn(btn); return; }
+      var j;
+      try{ j = JSON.parse(text); }catch(e){ toast('接口数据异常，已保留原数值', 'bad'); resetNetBtn(btn); return; }
+      var wd = null;
+      try{
+        if (j && j.summary && isFinite(+j.summary.workdays)) wd = +j.summary.workdays;
+        else if (j && j.data && j.data.summary && isFinite(+j.data.summary.workdays)) wd = +j.data.summary.workdays;
+        else if (j && j.days && Array.isArray(j.days)){
+          var c = 0;
+          for (var i=0;i<j.days.length;i++){ if (j.days[i] && j.days[i].is_workday === true) c++; }
+          if (c > 0) wd = c;
         }
-        var std = wd * 8;
-        var map = getStdMap();
-        map[ym] = std;
-        setStdMap(map);
-        /* 联网值 = 当月排班工时（考勤口径）。它只影响「底薪折算分母」，
-         * 不会覆盖「加班时薪分母」——后者是固定值，正是工资条加班单价的来源。 */
-        var S = getSet();
-        if (S.stdBase === 'fixed'){ $('sStd').value = std; }
-        renderDivMode(ym);
-        toast('联网更新成功：' + ymLabel(ym) + ' 当月排班 ' + wd + ' 天 × 8 = ' + std + 'h'
-          + '（已用于底薪折算；加班时薪仍按底薪 ÷ ' + (S.stdOt || 174) + 'h）', 'good');
-        refreshHome();
-      })
-      .catch(function(){
-        clearTimeout(timer);
-        toast('联网更新失败，已保留原数值', 'bad');
-      })
-      .finally(function(){
-        if (btn) { btn.disabled = false; btn.textContent = '🌐 联网更新（当月工作日 × 8）'; }
-      });
+      }catch(e){}
+      if (wd === null || wd <= 0){ toast('接口未返回有效工作日数，已保留原值', 'bad'); resetNetBtn(btn); return; }
+      var std = wd * 8;
+      var map = getStdMap();
+      map[ym] = std;
+      setStdMap(map);
+      /* 联网值 = 当月排班工时（考勤口径），只影响「底薪折算分母」；
+       * 不会覆盖「加班时薪分母」——后者是固定值，正是工资条加班单价的来源。 */
+      var S = getSet();
+      if (S.stdBase === 'fixed'){ $('sStd').value = std; }
+      renderDivMode(ym);
+      toast('联网更新成功：' + ymLabel(ym) + ' 当月排班 ' + wd + ' 天 × 8 = ' + std + 'h'
+        + '（已用于底薪折算；加班时薪仍按底薪 ÷ ' + (S.stdOt || 174) + 'h）', 'good');
+      resetNetBtn(btn);
+      refreshHome();
+    });
   }catch(e){
-    var b2 = $('netBtn'); if (b2){ b2.disabled = false; b2.textContent = '🌐 联网更新（当月工作日 × 8）'; }
+    resetNetBtn($('netBtn'));
     toast('联网更新失败，已保留原数值', 'bad');
   }
+}
+function resetNetBtn(btn){
+  if (btn) { btn.disabled = false; btn.textContent = '🌐 联网更新（当月工作日 × 8）'; }
 }
 
 /* ---------------- 法定节假日管理 ---------------- */
@@ -1878,24 +1870,28 @@ function renderHolidays(){
     cHtml += '</div>';
     $('holiCustomWrap').innerHTML = cHtml;
 
-    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置法定节假日（2024–2026，不可删除）</div>';
-    var years = ['2024','2025','2026'];
-    var cnt = 0;
+    var bHtml = '<div class="card pad"><div style="font-weight:700;font-size:15px;">内置节假日（2026–2029，不可删除）</div>';
+    bHtml += '<div class="hint" style="margin-top:4px;">只有<b>法定节假日当天</b>（国家强制三倍工资）按 3 倍计；其余放假连休日按休息日 2 倍计。</div>';
+    var years = ['2026','2027','2028','2029'];
     for (var y=0;y<years.length;y++){
-      var off = HOLI_OFF[years[y]] || {};
+      var yy = years[y];
+      var off = HOLI_OFF[yy] || {};
+      var t3 = HOLI_3X[yy] || {};
       var names = {};
-      for (var k in off){ var nm = off[k]; names[nm] = (names[nm]||0)+1; }
-      bHtml += '<div style="margin-top:8px;font-size:13px;color:var(--ink);font-weight:700;">' + years[y] + '年</div>';
+      for (var k in t3){ var nm = t3[k]; names[nm] = (names[nm]||0)+1; }
+      var n3 = 0; for (var kk in t3) n3++;
+      var nAll = 0; for (var k2 in off) nAll++;
+      var restN = nAll - n3; if (restN < 0) restN = 0;
+      bHtml += '<div style="margin-top:10px;font-size:13px;color:var(--ink);font-weight:700;">' + yy + '年　<span style="color:var(--main-deep);">强制3倍 ' + n3 + ' 天</span>' + (restN>0?('<span style="color:var(--ink3);">　放假连休(2倍) ' + restN + ' 天</span>'):'') + '</div>';
       bHtml += '<div style="font-size:12px;color:var(--ink3);margin-top:2px;">';
       var first = true;
       for (var nm2 in names){
         if (!first) bHtml += '　'; first = false;
         bHtml += esc(nm2) + '×' + names[nm2] + '天';
-        cnt += names[nm2];
       }
       bHtml += '</div>';
     }
-    bHtml += '<div class="hint" style="margin-top:8px;">共收录 ' + cnt + ' 个放假日期（含调休连休日期）；周末调休补班日会计为工作日。数据源：国务院办公厅放假安排。</div>';
+    bHtml += '<div class="hint" style="margin-top:10px;">法定节假日 = 元旦1天 + 春节(除夕+初一~初三)4天 + 清明1天 + 劳动节2天 + 端午1天 + 中秋1天 + 国庆3天 = 13天/年；周末调休补班日会计为工作日。</div>';
     bHtml += '</div>';
     $('holiBuiltinWrap').innerHTML = bHtml;
   }catch(e){ toast('节假日管理加载失败', 'bad'); }
@@ -2000,6 +1996,7 @@ window.punchBack = punchBack;
 window.editRecord = editRecord;
 window.askDeleteRecord = askDeleteRecord;
 window.askDeleteAllRecords = askDeleteAllRecords;
+window.askDeleteMonth = askDeleteMonth;
 window.exportRecs = exportRecs;
 window.closeExport = closeExport;
 window.selectExp = selectExp;
@@ -2013,13 +2010,15 @@ window.netUpdateStd = netUpdateStd;
 window.setBaseDiv = setBaseDiv;
 window.renderDivMode = renderDivMode;
 window.renderTaxHint = renderTaxHint;
-window.renderBaseNote = renderBaseNote;
 window.setTheme = setTheme;
 window.showHolidays = showHolidays;
 window.addHoliday = addHoliday;
 window.delCustomHoliday = delCustomHoliday;
 window.backfillToday = backfillToday;
 window.backfillAll = backfillAll;
+window.bfPopulate = bfPopulate;
+window.bfYearChange = bfYearChange;
+window.bfReadYM = bfReadYM;
 window.askConfirm = askConfirm;
 window.doConfirmOK = doConfirmOK;
 window.doConfirmCancel = doConfirmCancel;
