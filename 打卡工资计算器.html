@@ -55,7 +55,7 @@ body{
 .totalCard .lbl{font-size:13px; opacity:.9;}
 .totalCard .money{font-size:40px; font-weight:800; letter-spacing:.5px; margin:2px 0 6px;}
 .totalCard .money small{font-size:18px; font-weight:700; margin-right:3px;}
-.totalCard .meta{font-size:12px; opacity:.92;}
+.totalCard .meta{font-size:12px; opacity:.92; line-height:1.6;}
 
 /* month switch */
 .monthBar{display:flex; align-items:center; justify-content:space-between; margin:8px 2px 0;}
@@ -1097,19 +1097,15 @@ function refreshHome(){
     var S = getSet();
     var su = m.sum;
     var dayNoun = '（本月尚未打卡，可用「补卡」快速补齐）';
-    if (su.workRecords + su.legalRest + su.absent > 0){
-      dayNoun = '上班 ' + su.workRecords + ' 天 · 法定休息 ' + su.legalRest + ' 天 · 缺勤 ' + su.absent + ' 天';
-      if (su.restOther > 0) dayNoun += '（含假期休息日 ' + su.restOther + ' 天）';
-    }
+    var sumTxt = '上班 ' + su.workRecords + ' 天 · 缺勤 ' + su.absent + ' 天'
+      + '<br>标准出勤工时 ' + fmtH(m.stdBase) + 'h · 实际出勤工时 ' + fmtH(su.effHours) + 'h';
     $('totalLbl').textContent = ymLabel(_curYM) + ' 总收入';
     if (m.recCount === 0){
       $('totalMoney').innerHTML = '<small>¥</small>0.00';
       $('totalMeta').textContent = '本月暂无记录 · 打卡/补卡后自动计算';
     } else {
       $('totalMoney').innerHTML = '<small>¥</small>' + m.total.toFixed(2);
-      $('totalMeta').innerHTML = esc(dayNoun) + '　有效出勤 ' + fmtH(su.effHours) + 'h　底薪 ' + fmtMoney(m.baseUsed)
-        + (m.baseIsLocked ? '（本月锁定）' : '（跟随设置）')
-        + '　底薪分母 ' + m.stdBase + 'h　加班时薪 ' + fmtMoney(m.hourly) + '（底薪÷' + m.stdOt + 'h）';
+      $('totalMeta').innerHTML = sumTxt;
     }
 
     var otH = su.wd + su.we + su.hol;
