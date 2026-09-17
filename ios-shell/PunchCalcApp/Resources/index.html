@@ -688,7 +688,7 @@ function $(id){ return document.getElementById(id); }
 function esc(s){ s = String(s === undefined || s === null ? '' : s);
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function fmtMoney(v){ v = isFinite(v) ? v : 0; return '¥' + (Math.round(v*100)/100).toFixed(2); }
-function fmtH(v){ v = isFinite(v) ? v : 0; return (Math.round(v*10)/10).toFixed(1); }
+function fmtH(v){ v = isFinite(v) ? v : 0; return (Math.round(v*100)/100).toFixed(2); }
 function pad2(n){ return (n<10?'0':'') + n; }
 function todayStr(){ var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()); }
 function lastDay(y, m){ return new Date(y, m, 0).getDate(); }
@@ -739,7 +739,9 @@ function splitHours(dateStr, type, hours){
   }
   return {n:r1(n), d:r1(d), w:r1(w), h:r1(h)};
 }
-function r1(v){ return Math.round(v*10)/10; }
+/* 工时与金额一律保留两位，避免 7.75h 被吞成 7.8h、长小数累积误差 */
+function r1(v){ return Math.round(v*100)/100; }
+function money2(v){ return isFinite(v) ? Math.round(v*100)/100 : 0; }
 function r2(v){ return Math.round(v*100)/100; }
 
 /* ---------------- 页面切换 ---------------- */
@@ -916,17 +918,22 @@ function calcMonth(ym){
   sum.effHours = sum.normal + sum.legalRest * 8;
   var std = stdHoursForMonth(ym);
   var ratio = (std > 0) ? Math.min(sum.effHours / std, 1) : (sum.effHours > 0 ? 1 : 0);
-  var hourly = (std > 0) ? S.base / std : S.base / 174;
+  var hourly = (std > 0) ? money2(S.base / std) : money2(S.base / 174);
 
   var m = {};
-  m.base = S.base * ratio;
-  m.post = S.post * ratio;
-  m.perf = S.perf * ratio;
-  m.full = hasAbsent ? 0 : S.full;
-  m.otMoney = sum.wd * hourly * S.ot1 + sum.we * hourly * S.ot2 + sum.hol * hourly * S.ot3;
-  m.meal = Math.min(sum.mealDays * S.meal, S.mealCap);
-  m.social = S.social;
-  m.total = m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social;
+  m.base = money2(S.base * ratio);
+  m.post = money2(S.post * ratio);
+  m.perf = money2(S.perf * ratio);
+  m.full = hasAbsent ? 0 : money2(S.full);
+  /* 三档加班：平日 ot1 / 周末与假期休息日 ot2 / 法定当天 ot3 */
+  var otWd  = money2(sum.wd  * hourly * S.ot1);
+  var otWe  = money2(sum.we  * hourly * S.ot2);
+  var otHol = money2(sum.hol * hourly * S.ot3);
+  m.otWd = otWd; m.otWe = otWe; m.otHol = otHol;
+  m.otMoney = money2(otWd + otWe + otHol);
+  m.meal = money2(Math.min(sum.mealDays * S.meal, S.mealCap));
+  m.social = money2(S.social);
+  m.total = money2(m.base + m.post + m.perf + m.full + m.otMoney + m.meal - m.social);
   m.ratio = ratio;
   m.std = std;
   m.hourly = hourly;
@@ -966,9 +973,9 @@ function refreshHome(){
     inc += rowHtml('绩效奖金', fmtMoney(m.perf));
     inc += rowHtml('全勤奖' + (su.absent>0 ? '（有缺勤→0）' : ''), fmtMoney(m.full), su.absent>0?'':'green');
     inc += rowHtml('加班工资', fmtMoney(m.otMoney));
-    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h', fmtMoney(su.wd*m.hourly*S.ot1), 'muted');
-    inc += rowHtml('　· 周末加班 ' + fmtH(su.we) + 'h', fmtMoney(su.we*m.hourly*S.ot2), 'muted');
-    inc += rowHtml('　· 节假日加班 ' + fmtH(su.hol) + 'h', fmtMoney(su.hol*m.hourly*S.ot3), 'muted');
+    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h × ' + S.ot1, fmtMoney(m.otWd), 'muted');
+    inc += rowHtml('　· 周末/假期休息日 ' + fmtH(su.we) + 'h × ' + S.ot2, fmtMoney(m.otWe), 'muted');
+    inc += rowHtml('　· 法定当天 ' + fmtH(su.hol) + 'h × ' + S.ot3, fmtMoney(m.otHol), 'muted');
     inc += rowHtml('餐补（' + su.mealDays + '天 × ' + S.meal + '，上限' + S.mealCap + '）', fmtMoney(m.meal));
     inc += rowHtml('社保扣除', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
     inc += rowHtml('当月总收入', fmtMoney(m.total), 'green');
