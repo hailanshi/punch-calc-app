@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器</title>
+<title>打卡工资计算器 v2.0</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -121,6 +121,21 @@ body{
 .accHead{width:100%; border:0; background:transparent; text-align:left; padding:13px 14px; font-size:15px; font-weight:700; color:var(--ink); display:flex; align-items:center; justify-content:space-between;}
 .accHead .chev{color:var(--ink3); font-size:11px; transform:rotate(0deg); transition:transform .2s;}
 .accHead.on .chev{transform:rotate(90deg);}
+/* 折叠组标题右侧的即时摘要：不用展开也能看到关键值 */
+.accHead .accSum{flex:1; text-align:right; font-size:11px; font-weight:600; color:var(--ink3); margin:0 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.accHead.on .accSum{color:var(--main-deep);}
+/* 两列紧凑排布，缩短设置页 */
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:0 8px;}
+/* 顶部「当前生效」摘要 */
+.sumRow{display:flex; align-items:baseline; justify-content:space-between; gap:8px; font-size:13px; padding:3px 0;}
+.sumRow .k{color:var(--ink2); flex:0 0 auto;}
+.sumRow .v{font-weight:700; text-align:right; color:var(--ink);}
+/* 非互斥的并列子块（如标准工时的手动 / 联网两套） */
+.subBlock{border:1px solid var(--line); border-radius:14px; padding:10px 12px; margin-top:8px; background:var(--soft2);}
+.subBlock .field:last-child{margin-bottom:0;}
+.subHead{font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;}
+.subTag{font-size:11px; border-radius:8px; padding:2px 8px; font-weight:700; background:#eceff2; color:#8d939a;}
+.subTag.hit{background:var(--chip); color:var(--main-deep);}
 
 /* type pick */
 .typeRow{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
@@ -357,39 +372,56 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       <span style="width:52px;"></span>
     </header>
     <div class="scroll">
+      <div class="card pad" id="setSummary"></div>
+
       <div class="card pad">
-        <div style="font-weight:700;font-size:15px;margin-bottom:8px;">主题颜色</div>
+        <div class="sumRow" style="margin-bottom:8px;"><span class="k" style="font-weight:700;color:var(--ink);">主题颜色</span><span class="v" id="themeNow">—</span></div>
         <div class="dots" id="themeDots"></div>
       </div>
 
-      <div class="card pad">
-        <button type="button" class="accHead on" data-g="g1" onclick="window.toggleAcc(this)">基础参数<span class="chev">▶</span></button>
+      <div class="card">
+        <button type="button" class="accHead on" data-g="g1" onclick="window.toggleAcc(this)"><span>① 每月标准工时</span><span class="accSum" id="sumStd">—</span><span class="chev">▶</span></button>
         <div class="accBody on" id="acc-g1">
-          <div class="field"><label>底薪（元）</label><input type="number" id="sBase" step="10"><div class="unit" id="uBase"></div></div>
-          <div class="field"><label>加班时薪分母（小时，仅用于参考时薪）</label>
-            <input type="number" id="sStdOt" step="1">
-            <div style="margin-top:8px;">
-              <button type="button" class="btn soft mini" id="netBtn" onclick="window.netUpdateStd()">🌐 联网更新当月排班</button>
+          <div class="unit" id="uStdMonth" style="margin-bottom:2px;"></div>
+
+          <div class="subBlock">
+            <div class="subHead"><span>方案 A · 自己填</span><span class="subTag" id="tagStdManual">—</span></div>
+            <div class="field"><label>本月标准工时（小时）</label>
+              <input type="number" id="sStdMonth" step="0.5" min="1">
+              <div class="unit">填工资条上的「应出勤工时」，例如 176 / 168。只作用于 <b id="uStdMonthLbl">本月</b>。</div>
             </div>
-            <div class="unit" id="uStdOt"></div>
-          </div>
-          <div class="field"><label>底薪折算分母（小时）</label>
-            <input type="number" id="sStd" step="1">
-            <div style="margin-top:8px;">
-              <button type="button" class="btn soft mini" onclick="window.setBaseDiv('monthly')">当月排班（工作日×8）</button>
-              <button type="button" class="btn soft mini" onclick="window.setBaseDiv('fixed')">用固定值</button>
+            <div style="display:flex;gap:8px;margin-bottom:10px;">
+              <button type="button" class="btn main mini" style="flex:1;" onclick="window.applyStdMonth()">套用到本月</button>
+              <button type="button" class="btn ghost mini" style="flex:1;" onclick="window.clearStdMonth()">清除本月</button>
             </div>
-            <div class="unit" id="uStd"></div>
           </div>
-          <div class="field"><label>自动补卡默认工时（小时）</label><input type="number" id="sAuto" step="0.5" min="1"><div class="unit" id="uAuto"></div></div>
-          <div class="field"><label>每日餐补（元/天）</label><input type="number" id="sMeal" step="1"></div>
-          <div class="field"><label>每月餐补上限（元）</label><input type="number" id="sMealCap" step="10"></div>
+
+          <div class="subBlock">
+            <div class="subHead"><span>方案 B · 联网更新</span><span class="subTag" id="tagStdNet">—</span></div>
+            <div class="unit" style="margin-bottom:8px;">按当月工作日 × 8 自动算（法定节假日与调休都已算进去），写入本月。</div>
+            <button type="button" class="btn soft block" id="netBtn" onclick="window.netUpdateStd()">🌐 联网更新（当月工作日 × 8）</button>
+          </div>
+
+          <div class="unit" id="uStdMapList" style="margin-top:10px;"></div>
         </div>
       </div>
 
-      <div class="card pad">
-        <button type="button" class="accHead on" data-g="g2" onclick="window.toggleAcc(this)">加班费计算方式<span class="chev">▶</span></button>
-        <div class="accBody on" id="acc-g2">
+      <div class="card">
+        <button type="button" class="accHead" data-g="g2" onclick="window.toggleAcc(this)"><span>② 基础参数</span><span class="accSum" id="sumBase">—</span><span class="chev">▶</span></button>
+        <div class="accBody" id="acc-g2">
+          <div class="field"><label>底薪（元）</label><input type="number" id="sBase" step="10"><div class="unit" id="uBase"></div></div>
+          <div class="field"><label>加班时薪分母（小时）</label><input type="number" id="sStdOt" step="1"><div class="unit" id="uStdOt"></div></div>
+          <div class="grid2">
+            <div class="field"><label>自动补卡工时</label><input type="number" id="sAuto" step="0.5" min="1"></div>
+            <div class="field"><label>每日餐补（元/天）</label><input type="number" id="sMeal" step="1"></div>
+          </div>
+          <div class="field" style="margin-bottom:0;"><label>每月餐补上限（元）</label><input type="number" id="sMealCap" step="10"><div class="unit">补卡默认拆分：8h 正常出勤 + 其余按平日加班。</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <button type="button" class="accHead" data-g="g3" onclick="window.toggleAcc(this)"><span>③ 加班费计算方式</span><span class="accSum" id="sumOt">—</span><span class="chev">▶</span></button>
+        <div class="accBody" id="acc-g3">
           <label style="display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600;">二选一（互斥，永远不会同时参与计算）</label>
           <div class="typeRow" id="otModeRow">
             <button type="button" class="typeItem" data-m="rate" onclick="window.setOtMode('rate')">
@@ -405,47 +437,65 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
           <div class="modeBlock" id="blkRate">
             <div class="blkHead"><span>① 固定时薪（元/小时）</span><span class="blkTag" id="tagRate">—</span></div>
-            <div class="field"><label>平日加班时薪（元/小时）</label><input type="number" id="sRate1" step="0.01" min="0"></div>
-            <div class="field"><label>周末加班时薪（元/小时）</label><input type="number" id="sRate2" step="0.01" min="0"></div>
-            <div class="field"><label>法定节假日加班时薪（元/小时）</label><input type="number" id="sRate3" step="0.01" min="0"></div>
+            <div class="field"><label>平日加班时薪</label><input type="number" id="sRate1" step="0.01" min="0"></div>
+            <div class="grid2">
+              <div class="field"><label>周末加班时薪</label><input type="number" id="sRate2" step="0.01" min="0"></div>
+              <div class="field"><label>法定节假日时薪</label><input type="number" id="sRate3" step="0.01" min="0"></div>
+            </div>
           </div>
 
           <div class="modeBlock" id="blkMult">
             <div class="blkHead"><span>② 底薪倍数</span><span class="blkTag" id="tagMult">—</span></div>
             <div class="field"><label>平日加班（倍）</label><input type="number" id="sOT1" step="0.1" min="0"></div>
-            <div class="field"><label>周末加班（倍）</label><input type="number" id="sOT2" step="0.1" min="0"></div>
-            <div class="field"><label>法定节假日加班（倍）</label><input type="number" id="sOT3" step="0.1" min="0"></div>
+            <div class="grid2">
+              <div class="field"><label>周末加班（倍）</label><input type="number" id="sOT2" step="0.1" min="0"></div>
+              <div class="field"><label>法定节假日（倍）</label><input type="number" id="sOT3" step="0.1" min="0"></div>
+            </div>
             <div class="unit">单价 = 底薪 ÷ 加班时薪分母 × 倍数，会随底薪和月份变化。</div>
           </div>
 
           <div class="unit" id="uOtRate" style="margin-top:8px;"></div>
-          <button type="button" class="btn soft block" style="margin-top:10px;" onclick="window.saveSettings()">保存加班参数</button>
         </div>
       </div>
 
-      <div class="card pad">
-        <button type="button" class="accHead on" data-g="g3" onclick="window.toggleAcc(this)">补贴与奖金<span class="chev">▶</span></button>
-        <div class="accBody on" id="acc-g3">
-          <div class="field"><label>岗位补贴（元）</label><input type="number" id="sPost" step="10"></div>
-          <div class="field"><label>绩效奖金（元）</label><input type="number" id="sPerf" step="10"></div>
-          <div class="field"><label>全勤奖（元）</label><input type="number" id="sFull" step="10"></div>
-          <div class="field"><label>每月社保扣除（元）</label><input type="number" id="sSocial" step="10"></div>
-          <div class="field"><label>计算个税</label>
-            <select id="sTaxOn" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;">
+      <div class="card">
+        <button type="button" class="accHead" data-g="g4" onclick="window.toggleAcc(this)"><span>④ 补贴与奖金</span><span class="accSum" id="sumPay">—</span><span class="chev">▶</span></button>
+        <div class="accBody" id="acc-g4">
+          <div class="grid2">
+            <div class="field"><label>岗位补贴（元）</label><input type="number" id="sPost" step="10"></div>
+            <div class="field"><label>绩效奖金（元）</label><input type="number" id="sPerf" step="10"></div>
+            <div class="field"><label>全勤奖（元）</label><input type="number" id="sFull" step="10"></div>
+            <div class="field"><label>每月社保扣除（元）</label><input type="number" id="sSocial" step="10"></div>
+          </div>
+          <div class="field" style="margin-bottom:0;"><label>计算个税</label>
+            <select id="sTaxOn" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:var(--card);color:var(--ink);">
               <option value="off">不计算（只看应发/扣社保）</option>
               <option value="on">计算个税（单月算法）</option>
             </select>
             <div class="unit" id="uTax"></div>
           </div>
-          <div class="field"><label>个税起征点（元/月）</label><input type="number" id="sTaxThr" step="100"></div>
-          <div class="field"><label>个税税率</label><input type="number" id="sTaxRate" step="0.01" min="0"></div>
+          <div class="grid2" id="taxFields">
+            <div class="field" style="margin-bottom:0;"><label>个税起征点（元/月）</label><input type="number" id="sTaxThr" step="100"></div>
+            <div class="field" style="margin-bottom:0;"><label>个税税率</label><input type="number" id="sTaxRate" step="0.01" min="0"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <button type="button" class="accHead" data-g="g5" onclick="window.toggleAcc(this)"><span>⑤ 更多</span><span class="accSum" id="sumMore">—</span><span class="chev">▶</span></button>
+        <div class="accBody" id="acc-g5">
+          <button type="button" class="btn ghost block" style="margin-bottom:8px;" onclick="window.showHolidays()">📅 法定节假日管理</button>
+          <button type="button" class="btn ghost block" style="margin-bottom:8px;" onclick="window.resplitCurrent()">🔄 按当前节假日重算全部记录</button>
+          <button type="button" class="btn ghost block" style="margin-bottom:8px;" onclick="window.askResetSettings()">↩️ 恢复默认参数</button>
+          <div class="unit" id="uVersion">—</div>
         </div>
       </div>
 
       <button type="button" class="btn main block" style="margin:6px 0 20px;" onclick="window.saveSettings()">保存设置</button>
-      <div style="height:14px;"></div>
-      <button type="button" class="btn ghost block" style="margin-bottom:10px;" onclick="window.askResetSettings()">恢复默认参数</button>
-      <button type="button" class="btn ghost block" onclick="window.showHolidays()">📅 法定节假日管理</button>
+    </div>
+  </section>
+
+      <button type="button" class="btn main block" style="margin:6px 0 20px;" onclick="window.saveSettings()">保存设置</button>
     </div>
   </section>
 
@@ -503,14 +553,19 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         4. 未打卡的日期自动判定：<b>法定节假日→休息</b>(按 8h 计入有效出勤、享有底薪)；<b>周末 / 放假连休日→普通休息</b>(无底薪、不影响全勤)；<b>工作日→缺勤</b>(当月全勤清零)。当月未来日期暂不算缺勤。<br>
         5. 打卡页可手动选 <b>「缺勤」</b> 记录某天缺勤（不用填工时）；缺勤一律清零全勤奖，休息日/节假日记缺勤也同样清零。<br>
         6. 点「保存打卡」后<b>停留在打卡页</b>不回首页（方便接着录下一天），日期保持在刚存的那天；从记录页点「编辑」进去的，保存后回记录页。</p>
-        <p>自动补卡只填充工作日；周末、法定节假日、放假连休日、已有记录的日期自动跳过。内置 2026–2029 节假日（调休补班日待官方发布后可用「联网更新」校正）；每月标准工时＝该月工作日×8，各月不同。</p>
-        <p><b>节假日改动会重算已有记录：</b>记录里存的是打卡当时的归类快照，所以新增 / 删除自定义节假日、或给它「切档」之后，程序会按新归类把全部记录的正常 / 平日 / 周末 / 节假日工时重新拆分，工资立刻更新，toast 里会告知重算了几条。</p>
+        <p>自动补卡只填充工作日；周末、法定节假日、放假连休日、已有记录的日期自动跳过。内置 2026–2029 节假日（调休补班日待官方发布后可用「联网更新」校正）。</p>
+        <p><b>每月标准工时（两套方案）：</b>它同时就是底薪折算分母 ——「有效出勤工时 ÷ 本月标准工时（封顶 100%）= 出勤比例」，用来折算底薪 / 岗位补贴 / 绩效。<br>
+        · <b>方案 A 自己填</b>：填工资条上的「应出勤工时」（如 176 / 168），点「套用到本月」。<br>
+        · <b>方案 B 联网更新</b>：按当月工作日 × 8 自动算（法定节假日与调休都已算进去）。<br>
+        两套写的是同一个「本月标准工时」，以最后一次写入的为准，设置页会标出本月用的是哪一套；没设过的月份按「工作日 × 8」自动推算，「清除本月」可回到自动推算。<br>
+        <span style="color:var(--ink3);">v2.0 起原来的「底薪折算分母：当月排班 / 固定值」开关已并入本月标准工时 —— 想用固定值就手动填到每个月，避免两个设置互相覆盖。</span></p>
+        <p><b>节假日改动会重算已有记录：</b>记录里存的是打卡当时的归类快照，所以新增 / 删除自定义节假日、或给它「切档」之后，程序会按新归类把全部记录的正常 / 平日 / 周末 / 节假日工时重新拆分，工资立刻更新，toast 里会告知重算了几条；设置页「⑤ 更多」里也能手动触发一次。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🧮 工资计算公式</h3>
         <p>当月总收入 = 底薪 + 岗位补贴 + 绩效奖金 + 全勤奖 + 加班工资 + 餐补 − 社保扣除</p>
         <p><b>有效出勤工时</b> = 正常出勤工时 + 法定节假日休息天数 × 8</p>
-        <p><b>出勤比例</b> = min(有效出勤工时 ÷ 每月标准工时, 1)</p>
+        <p><b>出勤比例</b> = min(有效出勤工时 ÷ 本月标准工时, 1)</p>
         <p>底薪 / 岗位补贴 / 绩效奖金 均乘以出勤比例；缺勤则全勤奖为 0，否则全额发放。</p>
         <p><b>正常时薪</b> = 底薪 ÷ 加班时薪分母（默认 174）<br>
         <b>加班工资</b> = 平日加班工时 × 第1档时薪 + 周末加班工时 × 第2档时薪 + 节假日加班工时 × 第3档时薪</p>
@@ -522,7 +577,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
       <div class="card pad helpSec">
         <h3>⚙️ 默认参数一览</h3>
-        <p>底薪 2700 元 · 加班费默认按<b>固定时薪</b>：平日 23.28 / 周末 31.03 / 法定节假日 46.55 元/小时 · 备用的<b>底薪倍数</b>模式为 1.5 / 2 / 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 加班时薪分母 174h · 每月标准工时＝该月工作日×8 · 自动补卡工时 11 小时。</p>
+        <p>底薪 2700 元 · 加班费默认按<b>固定时薪</b>：平日 23.28 / 周末 31.03 / 法定节假日 46.55 元/小时 · 备用的<b>底薪倍数</b>模式为 1.5 / 2 / 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 加班时薪分母 174h · 本月标准工时按「工作日×8」自动推算（可手动填或联网更新）· 自动补卡工时 11 小时。</p>
       </div>
       <div class="card pad helpSec">
         <h3>📋 记录导出格式</h3>
@@ -531,7 +586,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
       <div class="card pad helpSec">
         <h3>🔒 数据与兼容性说明</h3>
-        <p>数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。本页已按 iOS 兼容要求处理安全区、弹窗布局与事件绑定。</p>
+        <p>打卡工资计算器 <b>v2.0</b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。本页已按 iOS 兼容要求处理安全区、弹窗布局与事件绑定。</p>
       </div>
     </div>
   </section>
@@ -601,6 +656,8 @@ var LS_THEME= 'punchSalaryTheme_v1';
 var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 
+var APP_VER = '2.0';                    /* 版本号：设置页「更多」与说明页都会显示 */
+
 var DEFAULTS = {
   base:2700, social:420, full:100, perf:50, post:400,
   meal:15, mealCap:360, std:174, auto:11,
@@ -612,7 +669,6 @@ var DEFAULTS = {
   otMode:'rate',
   ot1:1.5, ot2:2, ot3:3,                        /* 倍数模式：平日 / 周末 / 法定 */
   otRate1:23.28, otRate2:31.03, otRate3:46.55,  /* 固定时薪模式：平日 / 周末 / 法定 */
-  stdBase:'monthly', /* 底薪折算分母：'monthly'=当月排班工时(工作日×8)；'fixed'=用 std */
   taxOn:false,      /* 是否计算个税 */
   taxThr:5000,      /* 个税起征点（月） */
   taxRate:0.03      /* 个税税率；应纳税所得额超 3000 时会提示需按年表分档 */
@@ -632,6 +688,7 @@ var THEMES = {
   orange: {main:'#FFB74D', deep:'#ee9426', soft:'#FFF4E6', soft2:'#fffaf2', line:'#f6e3c4', chip:'#fbe9cf', chipInk:'#d97b14'},
   purple: {main:'#BA68C8', deep:'#9743a6', soft:'#F7EEF9', soft2:'#fcf7fd', line:'#ecddf0', chip:'#f0e1f3', chipInk:'#8c3d9b'}
 };
+var THEME_NAME = {pink:'粉色', mint:'薄荷绿', sky:'天空蓝', orange:'橙黄', purple:'紫色'};
 
 /* 内置法定节假日：off=放假日期(官方安排整段)，makeup=调休补班日期(周末上班)
  * 数据来源：国务院办公厅 2024 / 2025 / 2026 部分节假日安排。 */
@@ -738,7 +795,7 @@ function storeSet(k, v){
 }
 function getRecs(){ var a = storeGet(LS_REC, []); return Array.isArray(a) ? a : []; }
 function setRecs(a){ storeSet(LS_REC, a); }
-/* 读取设置：数值字段取数字；非数值字段（stdBase / taxOn 等布尔与枚举）原样继承，
+/* 读取设置：数值字段取数字；非数值字段（taxOn 这类布尔与枚举）原样继承，
  * 否则会被 isFinite 过滤掉，导致「计算个税」这类开关存了也不生效。 */
 function getSet(){
   var s = storeGet(LS_SET, null);
@@ -759,6 +816,35 @@ function getCustom(){ var c = storeGet(LS_CUS, []); return Array.isArray(c) ? c 
 function setCustom(c){ storeSet(LS_CUS, c); }
 function getStdMap(){ var m = storeGet(LS_STD, {}); return m && typeof m === 'object' ? m : {}; }
 function setStdMap(m){ storeSet(LS_STD, m); }
+/* 每月标准工时：两种来源写同一个 map，取"最后一次写入"的那套。
+ * 新格式 {h:小时, src:'manual'|'net', at:'MM-DD HH:mm'}；旧数据是纯数字，按手动值兼容读取。 */
+function stdRecOf(map, ym){
+  var v = (map || {})[ym];
+  if (v && typeof v === 'object' && isFinite(parseFloat(v.h))) {
+    return {h: parseFloat(v.h), src: (v.src === 'net' ? 'net' : 'manual'), at: v.at || ''};
+  }
+  if (isFinite(parseFloat(v)) && parseFloat(v) > 0) return {h: parseFloat(v), src: 'manual', at: ''};
+  return null;
+}
+function nowStamp(){
+  var d = new Date();
+  return pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function setStdForMonth(ym, h, src){
+  var m = getStdMap();
+  m[ym] = {h: h, src: (src === 'net' ? 'net' : 'manual'), at: nowStamp()};
+  setStdMap(m);
+}
+function clearStdForMonth(ym){
+  var m = getStdMap();
+  delete m[ym];
+  setStdMap(m);
+}
+function stdSrcTxt(src){
+  if (src === 'net') return '联网更新';
+  if (src === 'manual') return '手动填写';
+  return '自动推算';
+}
 /* 底薪按月：某月单独锁定的值优先，否则用设置里的全局底薪。
  * 这样调薪后回头看历史月份不会被改写（如 8月2520、9月起2700）。 */
 function getBaseMap(){ var m = storeGet(LS_BASE, {}); return m && typeof m === 'object' ? m : {}; }
@@ -1005,6 +1091,8 @@ function renderThemeDots(){
     html += '<button type="button" class="dot' + (k===cur?' on':'') + '" style="background:' + THEMES[k].main + ';" onclick="window.setTheme(\'' + k + '\')" aria-label="' + k + '"></button>';
   }
   w.innerHTML = html;
+  var tn = $('themeNow');
+  if (tn) tn.textContent = THEME_NAME[cur] || cur;
 }
 
 /* ---------------- 公告栏（QQ 昵称+个性签名跑马灯） ---------------- */
@@ -1039,17 +1127,19 @@ function loadBanner(){
 }
 
 /* ---------------- 首页：月统计 + 工资 ---------------- */
-/* 底薪折算分母 baseDiv：当月排班工时 = 工作日 × 8（8月=168），或设置里的固定值。
- * otDiv（原「加班时薪分母」，默认 174 = 21.75天 × 8）现在只用于显示参考时薪
- * 「正常时薪 = 底薪 ÷ 174」，加班费改成直接乘设置里的固定时薪（otRate1~3）。 */
+/* 每月标准工时 = 底薪折算分母（有效出勤 ÷ 它 = 出勤比例，封顶 1）。
+ * 取值优先级：本月设过的值（手动填 / 联网更新）→ 当月工作日×8 自动推算 → 设置里的默认值。
+ * 原来那个「底薪折算分母：当月排班 / 固定值」的开关已并入本月的标准工时，
+ * 固定值想用就手动填到每个月，避免两个设置互相覆盖。 */
 function stdInfo(ym){
   var map = getStdMap();
   var s = getSet();
   var workdays = offlineWorkdays(ym);
-  var monthly = (map[ym] > 0) ? map[ym] : (workdays > 0 ? workdays * 8 : ((s.std > 0) ? s.std : 174));
+  var rec = stdRecOf(map, ym);
+  var monthly = rec ? rec.h : (workdays > 0 ? workdays * 8 : ((s.std > 0) ? s.std : 174));
   var otDiv = (s.stdOt > 0) ? s.stdOt : 174;
-  if (s.stdBase === 'fixed'){ monthly = (s.std > 0) ? s.std : 174; }
-  return { baseDiv: monthly, otDiv: otDiv, monthly: monthly, workdays: workdays, netStd: map[ym] || null };
+  return { baseDiv: monthly, otDiv: otDiv, monthly: monthly, workdays: workdays,
+           stdSrc: rec ? rec.src : 'auto', stdAt: rec ? rec.at : '', netStd: rec ? rec.h : null };
 }
 /* 兼容旧调用：历史上这个函数只返回一个"标准工时"，语义等同加班时薪分母 */
 function stdHoursForMonth(ym){ return stdInfo(ym).otDiv; }
@@ -1150,7 +1240,9 @@ function calcMonth(ym){
   m.ratio = ratio;
   m.baseUsed = base;        /* 该月实际使用的底薪（按月锁定值优先） */
   m.baseIsLocked = isFinite(parseFloat(getBaseMap()[ym]));
-  m.stdBase = stdBase;      /* 底薪折算分母 */
+  m.stdBase = stdBase;      /* 本月标准工时 = 底薪折算分母 */
+  m.stdSrc = si.stdSrc;     /* 这个值哪来的：manual / net / auto */
+  m.stdAt = si.stdAt;
   m.stdOt = stdOt;          /* 加班时薪分母 */
   m.workdays = si.workdays;
   m.hourly = hourly;
@@ -1209,7 +1301,7 @@ function refreshHome(){
     $('incomeHint').textContent = ih;
 
     var hs = '';
-    hs += rowHtml('底薪折算分母（当月排班）', fmtH(m.stdBase) + ' h');
+    hs += rowHtml('本月标准工时（底薪折算分母）', fmtH(m.stdBase) + ' h · ' + stdSrcTxt(m.stdSrc));
     hs += rowHtml('加班计算方式', (m.otMode === 'mult') ? '底薪倍数（÷' + fmtH(m.stdOt) + 'h×倍数）' : '固定时薪（元/小时）');
     hs += rowHtml('平日加班时薪', otNote(m, 1));
     hs += rowHtml('周末加班时薪', otNote(m, 2));
@@ -1240,20 +1332,32 @@ function refreshHome(){
     toast('首页刷新失败：' + (e && e.message ? e.message : e), 'bad');
   }
 }
-function toggleCard(btn){
-  try{
-    var card = btn.parentNode;
-    card.className = card.className.indexOf('open') >= 0 ? 'card collapsed' : 'card open';
-  }catch(e){}
-}
+/* 设置页手风琴：一次只展开一组，避免整页被拉得很长。
+ * 收起只是切 className，输入框还在 DOM 里，所以未保存的编辑不会丢。 */
 function toggleAcc(btn){
   try{
     var g = btn.getAttribute('data-g');
     var body = $('acc-' + g);
     if (!body) return;
-    var on = body.className.indexOf('on') >= 0;
-    if (on){ body.className = body.className.replace(/ on/g,''); btn.className = btn.className.replace(/ on/g,''); }
-    else { body.className += ' on'; btn.className += ' on'; }
+    var wasOn = body.className.indexOf('on') >= 0;
+    var heads = document.querySelectorAll('#page-settings .accHead');
+    for (var i=0;i<heads.length;i++){
+      var gi = heads[i].getAttribute('data-g');
+      var bi = gi ? $('acc-' + gi) : null;
+      if (bi) bi.className = 'accBody';
+      heads[i].className = 'accHead';
+    }
+    if (!wasOn){
+      body.className = 'accBody on';
+      btn.className = 'accHead on';
+    }
+    renderAccSums();
+  }catch(e){}
+}
+function toggleCard(btn){
+  try{
+    var card = btn.parentNode;
+    card.className = card.className.indexOf('open') >= 0 ? 'card collapsed' : 'card open';
   }catch(e){}
 }
 
@@ -1829,32 +1933,24 @@ function doImportOverwrite(arg){
 
 /* ---------------- 设置 ---------------- */
 /* 两个分母的口径说明。实证：工资条「应出勤工时 168」管底薪折算，
- * 「加班单价 21.7241 = 2520÷174×1.5」管加班费，两者分母不同。 */
+ * 「加班单价 21.7241 = 2520÷174×1.5」管加班费，两者分母不同。
+ * 底薪折算分母 = 「① 每月标准工时」（手动填 / 联网更新）；
+ * 加班时薪分母 = 倍数模式的分母，也用于显示参考正常时薪。 */
 function renderDivMode(ym){
   var S = getSet();
-  var map = getStdMap();
-  var wd = offlineWorkdays(ym);
-  var monthly = (map[ym] > 0) ? map[ym] : (wd > 0 ? wd * 8 : 0);
   var otEl = $('uStdOt');
   if (otEl){
     var mode = otModeOf(S);
     if (mode === 'mult'){
       otEl.innerHTML = '<b>底薪倍数模式正在用这个分母</b>：单价 = 底薪 ÷ <b>' + (S.stdOt || 174) + 'h</b> × 倍数。'
         + '<br>' + (S.stdOt || 174) + ' = 21.75 天 × 8（《劳动法》月计薪天数），公司工资条的加班单价通常按这个折算。'
-        + '<br>不参与底薪折算（那是下面「底薪折算分母」的事）。';
+        + '<br>它不参与底薪折算（底薪用「① 每月标准工时」那个数）。';
     } else {
       otEl.innerHTML = '只用来显示参考值「正常时薪 = 底薪 ÷ <b>' + (S.stdOt || 174) + 'h</b> = '
         + fmtMoney(money2(baseFor(_curYM, S) / (S.stdOt || 174))) + '」，<b>当前不参与加班费计算</b>。'
         + '<br>' + (S.stdOt || 174) + ' = 21.75 天 × 8（《劳动法》月计薪天数）。'
         + '<br>当前是固定时薪模式；切到「底薪倍数」模式后，这个分母就会参与加班单价换算。';
     }
-  }
-  var bEl = $('uStd');
-  if (bEl){
-    var fixed = (S.stdBase === 'fixed');
-    bEl.innerHTML = '底薪折算分母：<b>' + (fixed ? '固定值 ' + (S.std || 174) + 'h' : '当月排班 ' + monthly + 'h') + '</b>。'
-      + ymLabel(ym) + ' 排班 ' + (monthly || '—') + 'h。'
-      + (fixed ? '' : '<br>出勤比例 = 有效出勤工时 ÷ ' + monthly + 'h（封顶 100%），用于折算底薪/补贴/绩效。');
   }
 }
 /* 底薪按月：设置页保存时写入「当前查看的月份」，这样调薪不会改写历史月份。
@@ -1890,18 +1986,35 @@ function renderTaxHint(){
     + ' − ' + fmtMoney(thr) + ' = 应纳税所得额 ' + fmtMoney(taxable) + ' → 个税 ' + fmtMoney(taxFor(cur.taxBase, S))
     + warn;
 }
-function setBaseDiv(mode){
+/* ---------------- 每月标准工时：两套方案（自己填 / 联网更新） ---------------- */
+/* 方案 A：手动套用当月值 */
+function applyStdMonth(){
   try{
-    var S = getSet();
-    S.stdBase = (mode === 'fixed') ? 'fixed' : 'monthly';
-    setSet(S);
-    renderDivMode(_curYM);
-    toast(S.stdBase === 'fixed' ? '底薪折算分母已改为固定 ' + S.std + 'h' : '底薪折算分母已改为「当月排班」', 'good');
-    refreshHome();
-  }catch(e){ toast('切换失败：' + (e && e.message ? e.message : e), 'bad'); }
+    var v = parseFloat(($('sStdMonth').value || '').toString().replace(',', '.'));
+    if (!isFinite(v) || v <= 0){ toast('请输入有效的标准工时（大于 0 的小时数）', 'bad'); return; }
+    if (v > 744) v = 744;
+    setStdForMonth(_curYM, v, 'manual');
+    renderStdSection(); renderSetSummary(); renderAccSums(); renderDivMode(_curYM); refreshHome();
+    toast('已把 ' + ymLabel(_curYM) + ' 的标准工时设为 ' + fmtH(v) + 'h（手动填写）', 'good');
+  }catch(e){ toast('套用失败：' + (e && e.message ? e.message : e), 'bad'); }
 }
-/* 从表单收集全部参数。两套加班参数都收集，切换模式时不丢值。
- * otMode / stdBase 由各自的即时按钮维护，这里从已存设置里带过来。 */
+/* 清除本月自定义值，回到「工作日×8」自动推算 */
+function clearStdMonth(){
+  try{
+    clearStdForMonth(_curYM);
+    renderStdSection(); renderSetSummary(); renderAccSums(); renderDivMode(_curYM); refreshHome();
+    var auto = offlineWorkdays(_curYM) * 8;
+    toast(ymLabel(_curYM) + ' 已清除，回到自动推算 ' + auto + 'h', 'good');
+  }catch(e){ toast('清除失败：' + (e && e.message ? e.message : e), 'bad'); }
+}
+/* 重算全部记录（换节假日数据后手动触发一次） */
+function resplitCurrent(){
+  try{
+    var n = afterHolidayChange();
+    toast(n > 0 ? ('已按当前节假日重算 ' + n + ' 条记录') : '全部记录已是最新，无需重算', n > 0 ? 'good' : '');
+  }catch(e){ toast('重算失败', 'bad'); }
+}
+
 function collectSettings(){
   function gv(id, dflt){ var v = parseFloat(($(id).value || '').toString().replace(',', '.')); return isFinite(v) ? v : dflt; }
   var prev = getSet();
@@ -1923,9 +2036,9 @@ function collectSettings(){
     post: Math.max(0, gv('sPost', 400)),
     meal: Math.max(0, gv('sMeal', 15)),
     mealCap: Math.max(0, gv('sMealCap', 360)),
-    std: Math.max(1, gv('sStd', 174)),
+    /* std 已没有输入框：它只是「工作日也算不出来」时的兜底值，沿用旧值即可 */
+    std: (prev.std > 0) ? prev.std : 174,
     stdOt: Math.max(1, gv('sStdOt', 174)),
-    stdBase: (prev.stdBase === 'fixed') ? 'fixed' : 'monthly',
     auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
   };
 }
@@ -1948,7 +2061,6 @@ function renderSettings(){
   try{
     var S = getSet();
     $('sBase').value = baseFor(_curYM, S);   /* 显示当前查看月份的底薪 */
-    $('sStd').value = S.std;
     $('sStdOt').value = S.stdOt || 174;
     $('sAuto').value = S.auto;
     $('sMeal').value = S.meal;
@@ -1967,14 +2079,97 @@ function renderSettings(){
     $('sTaxThr').value = isFinite(S.taxThr) ? S.taxThr : 5000;
     $('sTaxRate').value = isFinite(S.taxRate) ? S.taxRate : 0.03;
     renderTaxHint();
-    $('uBase').textContent = '底薪 / 岗位补贴 / 绩效 按「有效出勤 ÷ 底薪折算分母」折算；加班费按下方选定的那一种方式计算。';
+    $('uBase').innerHTML = '底薪 / 岗位补贴 / 绩效 按「有效出勤 ÷ 本月标准工时」折算。'
+      + '<br>保存后写入<b>当前查看的月份 ' + ymLabel(_curYM) + '</b>，调薪切月保存即可，历史月份不会被改写。';
     renderOtModeUI();
+    renderStdSection();
     renderBaseNote();
     renderDivMode(_curYM);
-    $('uAuto').textContent = '补卡默认拆分：8h 正常出勤 + 其余按平日加班';
+    renderSetSummary();
+    renderAccSums();
+    var uv = $('uVersion');
+    if (uv) uv.innerHTML = '打卡工资计算器 <b>v' + APP_VER + '</b> · 单文件离线运行 · 数据存本机 localStorage';
     $('autoHrInfo').textContent = S.auto;
     renderThemeDots();
-  }catch(e){ toast('设置页加载失败', 'bad'); }
+  }catch(e){ toast('设置页加载失败：' + (e && e.message ? e.message : e), 'bad'); }
+}
+/* 顶部「当前生效」摘要：不展开任何分组也能看清现在按什么算 */
+function renderSetSummary(){
+  try{
+    var el = $('setSummary'); if (!el) return;
+    var S = getSet();
+    var si = stdInfo(_curYM);
+    var R = otRatesFor(_curYM, S);
+    var lines = '';
+    lines += sumRow('底薪（' + ymLabel(_curYM) + '）', fmtMoney(baseFor(_curYM, S)));
+    lines += sumRow('本月标准工时', fmtH(si.baseDiv) + 'h · ' + stdSrcTxt(si.stdSrc));
+    lines += sumRow('加班费计算方式', (otModeOf(S) === 'mult' ? '底薪倍数' : '固定时薪') + '（' + fmtRate(R.r1) + '/' + fmtRate(R.r2) + '/' + fmtRate(R.r3) + '）');
+    lines += sumRow('社保 / 全勤 / 餐补', fmtMoney(S.social) + ' / ' + fmtMoney(S.full) + ' / ' + fmtMoney(S.meal) + '一天');
+    el.innerHTML = '<div class="sumRow" style="padding-top:0;"><span class="k" style="font-weight:700;color:var(--ink);">📊 当前生效</span>'
+      + '<span class="v" style="font-size:11px;color:var(--ink3);">改完记得保存</span></div>' + lines;
+  }catch(e){}
+}
+function sumRow(k, v){
+  return '<div class="sumRow"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+}
+/* 各折叠组标题右侧的即时摘要 */
+function renderAccSums(){
+  try{
+    var S = getSet();
+    var si = stdInfo(_curYM);
+    var set = function(id, txt){ var e = $(id); if (e) e.textContent = txt; };
+    set('sumStd', fmtH(si.baseDiv) + 'h · ' + stdSrcTxt(si.stdSrc));
+    set('sumBase', '底薪 ' + fmtMoney(baseFor(_curYM, S)));
+    set('sumOt', (otModeOf(S) === 'mult' ? '底薪倍数' : '固定时薪'));
+    set('sumPay', '社保 ' + fmtMoney(S.social));
+    /* 主题名由 renderThemeDots 统一写（要中文名），这里别覆盖它 */
+    var sm = $('sumMore');
+    if (sm) sm.textContent = '';
+  }catch(e){}
+}
+/* 每月标准工时分组的全部显示（两套方案的状态、来源、已设月份列表） */
+function renderStdSection(){
+  try{
+    var si = stdInfo(_curYM);
+    var auto = offlineWorkdays(_curYM) * 8;
+    var lbl = $('uStdMonthLbl');
+    if (lbl) lbl.textContent = ymLabel(_curYM);
+    var inp = $('sStdMonth');
+    if (inp) inp.value = si.baseDiv;
+
+    var u = $('uStdMonth');
+    if (u){
+      if (si.stdSrc === 'auto'){
+        u.innerHTML = ymLabel(_curYM) + ' 现在是<b>自动推算</b>：工作日 ' + si.workdays + ' 天 × 8 = <b>' + auto + 'h</b>。'
+          + '<br>要按工资条上的数走，用下面任一方案设一个固定值。';
+      } else {
+        u.innerHTML = ymLabel(_curYM) + ' 现在是<b>' + stdSrcTxt(si.stdSrc) + '</b>的值：<b>' + fmtH(si.baseDiv) + 'h</b>'
+          + (si.stdAt ? '（' + si.stdAt + ' 写入）' : '')
+          + '。自动推算本来会是 ' + auto + 'h。';
+      }
+    }
+    var tm = $('tagStdManual'), tn2 = $('tagStdNet');
+    if (tm){ tm.textContent = (si.stdSrc === 'manual') ? '✅ 本月生效' : '未生效'; tm.className = 'subTag' + (si.stdSrc === 'manual' ? ' hit' : ''); }
+    if (tn2){ tn2.textContent = (si.stdSrc === 'net') ? '✅ 本月生效' : '未生效'; tn2.className = 'subTag' + (si.stdSrc === 'net' ? ' hit' : ''); }
+
+    var list = $('uStdMapList');
+    if (list){
+      var map = getStdMap();
+      var keys = Object.keys(map).sort();
+      if (!keys.length){
+        list.innerHTML = '还没有单独设过任何月份，全部按月自动推算（工作日×8）。';
+      } else {
+        var parts = [];
+        for (var i=0;i<keys.length;i++){
+          var r = stdRecOf(map, keys[i]);
+          if (!r) continue;
+          parts.push(keys[i] + ' <b>' + fmtH(r.h) + 'h</b>' + (r.src === 'net' ? '(联网)' : '(手动)'));
+        }
+        list.innerHTML = '已单独设过 ' + parts.length + ' 个月：' + parts.join('、')
+          + '<br>这些月份不受「工作日×8」影响；其余月份自动推算。';
+      }
+    }
+  }catch(e){}
 }
 /* 模式按钮高亮 + 生效/未生效标注 + 两组的灰显，全部集中在这里 */
 function renderOtModeUI(){
@@ -2067,16 +2262,11 @@ function netUpdateStd(){
       }catch(e){}
       if (wd === null || wd <= 0){ toast('接口未返回有效工作日数，已保留原值', 'bad'); resetNetBtn(btn); return; }
       var std = wd * 8;
-      var map = getStdMap();
-      map[ym] = std;
-      setStdMap(map);
-      /* 联网值 = 当月排班工时（考勤口径），只影响「底薪折算分母」；
-       * 不会覆盖「加班时薪分母」——后者是固定值，正是工资条加班单价的来源。 */
-      var S = getSet();
-      if (S.stdBase === 'fixed'){ $('sStd').value = std; }
-      renderDivMode(ym);
-      toast('联网更新成功：' + ymLabel(ym) + ' 当月排班 ' + wd + ' 天 × 8 = ' + std + 'h'
-        + '（已用于底薪折算；加班费按「加班时薪（元/小时）」计算）', 'good');
+      setStdForMonth(ym, std, 'net');
+      /* 联网值 = 当月标准工时（底薪折算分母）。只影响底薪折算，
+       * 不碰「加班时薪分母」——后者是倍数模式的分母，与考勤排班无关。 */
+      renderStdSection(); renderSetSummary(); renderAccSums(); renderDivMode(ym);
+      toast('联网更新成功：' + ymLabel(ym) + ' 工作日 ' + wd + ' 天 × 8 = ' + std + 'h（方案 B）', 'good');
       resetNetBtn(btn);
       refreshHome();
     });
@@ -2339,7 +2529,9 @@ window.onImportFile = onImportFile;
 window.saveSettings = saveSettings;
 window.askResetSettings = askResetSettings;
 window.netUpdateStd = netUpdateStd;
-window.setBaseDiv = setBaseDiv;
+window.applyStdMonth = applyStdMonth;      // 每月标准工时·方案A 手动套用
+window.clearStdMonth = clearStdMonth;      // 清除本月，回到自动推算
+window.resplitCurrent = resplitCurrent;    // 按当前节假日重算全部记录
 window.setOtMode = setOtMode;              // 加班费计算方式切换（固定时薪 / 底薪倍数）
 window.resplitRecords = resplitRecords;    // 按当前节假日规则重算全部记录
 window.renderDivMode = renderDivMode;
