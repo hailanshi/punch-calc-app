@@ -105,3 +105,53 @@ cd ios-shell/PunchCalcApp && ./build-ipa.sh
 
 > 建议改完用 `SHA256` 或 `git hash-object` 核对两份一致，避免又出现「两代版本」。
 
+## 日常维护速查
+
+改完东西按这个顺序走，别跳步：
+
+```bash
+# 1) 改业务文件（只改根目录那份）
+#    打卡工资计算器.html
+
+# 2) 跑自检：语法 / 内联 handler 与 window 导出一致性 / $('id') 与 HTML id 对齐 /
+#    两套加班参数互斥 / 归类·工时·加班费·缺勤·节假日重算·标准工时两套方案 等 140+ 项
+node tools/selfcheck.js 打卡工资计算器.html
+#    → 必须「0 失败」再往下走；退出码非 0 就是有问题
+
+# 3) 同步到 ipa 用的那一份，并核对哈希一致（CI 只读这份！）
+cp 打卡工资计算器.html ios-shell/PunchCalcApp/Resources/index.html
+git hash-object 打卡工资计算器.html ios-shell/PunchCalcApp/Resources/index.html   # 两个哈希必须相同
+
+# 4) 提交并推送 —— 推 main 会自动触发云端打包
+git add -A && git commit -m "..." && git push origin main
+
+# 5) 等 Actions 跑完，下载 ipa
+gh run list --repo hailanshi/punch-calc-app --limit 3
+gh run download <run-id> --repo hailanshi/punch-calc-app --name punch-calculator-ipa --dir out
+```
+
+### 版本号要改三个地方
+
+| 位置 | 字段 |
+| --- | --- |
+| `打卡工资计算器.html` | `var APP_VER = '2.0'`（设置页「⑤ 更多」与说明页显示） |
+| `ios-shell/PunchCalcApp/Info.plist` | `CFBundleShortVersionString` / `CFBundleVersion` |
+| `ios-shell/PunchCalcApp/PunchCalc-Info.plist` | 同上 |
+
+> ⚠️ 本机（Windows）**没有 iOS 工具链**（无 xcodebuild / theos / clang），发不了 ipa。
+> GitHub Actions 的 artifact 默认 **90 天过期**，要长期留存就把 ipa 发到 Release 里。
+
+### 如果 `git push` 连不上 github.com
+
+国内网络下 `github.com:443` 会间歇性不通，但 `api.github.com` 通常还是通的，可以这样区分：
+
+```bash
+git push origin main                                    # 失败：Failed to connect to github.com
+gh api rate_limit --jq '.rate.remaining'                # 成功 → 说明只是 github.com 被挡
+```
+
+这时不必干等，可以用 Git Data API 把本地提交原样推上去（`tools/push-via-api.js`）：
+它会读本地 HEAD 的原始 commit 对象（tree / parent / author / 时间 / 消息全部照抄），
+逐个上传 blob 再建 tree 和 commit，**每一步都核对 SHA**，只有构造出的 commit 与本地
+HEAD 完全一致时才更新分支引用 —— 不一致就直接中止，绝不产生分叉历史。
+

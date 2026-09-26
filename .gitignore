@@ -1,0 +1,13 @@
+# 构建产物：ipa 由 GitHub Actions 生成并作为 artifact 上传，不进仓库
+*.ipa
+# 打包/编译中间产物
+ios-shell/PunchCalcApp/build/
+ios-shell/PunchCalcApp/_payload/
+ios-shell/PunchCalcApp/*.xcodeproj/
+ios-shell/PunchCalcApp/build.log
+build.log
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
