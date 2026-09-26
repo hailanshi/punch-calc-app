@@ -132,6 +132,14 @@ body{
 .typeItem.on{border-color:var(--main); background:var(--chip);}
 .typeItem.on .nm{color:var(--main-deep);}
 
+/* 二选一的参数组：未生效那组灰显并标注，避免两套同时参与计算 */
+.modeBlock{border:1px solid var(--line); border-radius:14px; padding:10px 12px 2px; margin-top:10px; background:var(--soft2);}
+.modeBlock.on{border-color:var(--main); background:var(--card);}
+.modeBlock.off{opacity:.5;}
+.blkHead{font-size:13px; font-weight:700; color:var(--ink); display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;}
+.blkTag{font-size:11px; border-radius:8px; padding:2px 8px; font-weight:700; background:var(--chip); color:var(--main-deep);}
+.modeBlock.off .blkTag{background:#eee; color:#999;}
+
 /* records */
 .rec{background:var(--card); border-radius:16px; margin:8px 0; padding:11px 12px; box-shadow:0 2px 8px rgba(0,0,0,.04);}
 .rec .top{display:flex; align-items:center; justify-content:space-between;}
@@ -380,12 +388,38 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
 
       <div class="card pad">
-        <button type="button" class="accHead on" data-g="g2" onclick="window.toggleAcc(this)">加班时薪（元/小时）<span class="chev">▶</span></button>
+        <button type="button" class="accHead on" data-g="g2" onclick="window.toggleAcc(this)">加班费计算方式<span class="chev">▶</span></button>
         <div class="accBody on" id="acc-g2">
-          <div class="field"><label>平日加班时薪（元/小时）</label><input type="number" id="sRate1" step="0.01" min="0"></div>
-          <div class="field"><label>周末加班时薪（元/小时）</label><input type="number" id="sRate2" step="0.01" min="0"></div>
-          <div class="field"><label>法定节假日加班时薪（元/小时）</label><input type="number" id="sRate3" step="0.01" min="0"></div>
-          <div class="unit" style="margin-top:-4px;" id="uOtRate"></div>
+          <label style="display:block;font-size:13px;color:var(--ink2);margin-bottom:5px;font-weight:600;">二选一（互斥，永远不会同时参与计算）</label>
+          <div class="typeRow" id="otModeRow">
+            <button type="button" class="typeItem" data-m="rate" onclick="window.setOtMode('rate')">
+              <div class="nm">固定时薪</div>
+              <div class="ds">直接填单价（元/小时）</div>
+            </button>
+            <button type="button" class="typeItem" data-m="mult" onclick="window.setOtMode('mult')">
+              <div class="nm">底薪倍数</div>
+              <div class="ds">底薪÷分母×倍数</div>
+            </button>
+          </div>
+          <div class="unit" id="uOtMode" style="margin-bottom:2px;"></div>
+
+          <div class="modeBlock" id="blkRate">
+            <div class="blkHead"><span>① 固定时薪（元/小时）</span><span class="blkTag" id="tagRate">—</span></div>
+            <div class="field"><label>平日加班时薪（元/小时）</label><input type="number" id="sRate1" step="0.01" min="0"></div>
+            <div class="field"><label>周末加班时薪（元/小时）</label><input type="number" id="sRate2" step="0.01" min="0"></div>
+            <div class="field"><label>法定节假日加班时薪（元/小时）</label><input type="number" id="sRate3" step="0.01" min="0"></div>
+          </div>
+
+          <div class="modeBlock" id="blkMult">
+            <div class="blkHead"><span>② 底薪倍数</span><span class="blkTag" id="tagMult">—</span></div>
+            <div class="field"><label>平日加班（倍）</label><input type="number" id="sOT1" step="0.1" min="0"></div>
+            <div class="field"><label>周末加班（倍）</label><input type="number" id="sOT2" step="0.1" min="0"></div>
+            <div class="field"><label>法定节假日加班（倍）</label><input type="number" id="sOT3" step="0.1" min="0"></div>
+            <div class="unit">单价 = 底薪 ÷ 加班时薪分母 × 倍数，会随底薪和月份变化。</div>
+          </div>
+
+          <div class="unit" id="uOtRate" style="margin-top:8px;"></div>
+          <button type="button" class="btn soft block" style="margin-top:10px;" onclick="window.saveSettings()">保存加班参数</button>
         </div>
       </div>
 
@@ -459,16 +493,18 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     <div class="scroll">
       <div class="card pad helpSec">
         <h3>📌 功能简介</h3>
-        <p>打卡工资计算器：打卡页可选「上班打卡」或「缺勤」，上班打卡只需录入工时；法定节假日休息、普通休息仍按当天日期与是否打卡<b>自动判定</b>。自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 节假日加班，加班费按<b>三档固定加班时薪（元/小时）</b>计算；按设定参数自动计算当月工资。节假日管理里可自定义日期并指定它属于<b>周末加班档</b>还是<b>节假日加班档</b>。所有数据保存在本机，无需服务器。</p>
+        <p>打卡工资计算器：打卡页可选「上班打卡」或「缺勤」，上班打卡只需录入工时；法定节假日休息、普通休息仍按当天日期与是否打卡<b>自动判定</b>。自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 节假日加班，加班费按设置里选定的计算方式算；按设定参数自动计算当月工资。节假日管理里可自定义日期并指定它属于<b>周末加班档</b>还是<b>节假日加班档</b>。所有数据保存在本机，无需服务器。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🕐 工时判定规则</h3>
-        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>（默认 23.28 元/h）。<br>
-        2. 周末上班：全部工时计为<b>周末加班</b>（默认 31.03 元/h），不计正常出勤。<br>
-        3. <b>法定节假日当天</b>上班：全部工时计<b>节假日加班</b>（默认 46.55 元/h）。注意：只有国家强制三倍工资的法定节假日当天才走这一档（元旦 1 天、春节除夕+初一~初三 4 天、清明 1 天、劳动节 2 天、端午 1 天、中秋 1 天、国庆 3 天，共 13 天/年）；同一次放假的<b>连休日</b>属休息日，走周末加班档。<br>
+        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>（第 1 档）。<br>
+        2. 周末上班：全部工时计为<b>周末加班</b>（第 2 档），不计正常出勤。<br>
+        3. <b>法定节假日当天</b>上班：全部工时计<b>节假日加班</b>（第 3 档）。注意：只有国家强制三倍工资的法定节假日当天才走这一档（元旦 1 天、春节除夕+初一~初三 4 天、清明 1 天、劳动节 2 天、端午 1 天、中秋 1 天、国庆 3 天，共 13 天/年）；同一次放假的<b>连休日</b>属休息日，走周末加班档（第 2 档）。<br>
         4. 未打卡的日期自动判定：<b>法定节假日→休息</b>(按 8h 计入有效出勤、享有底薪)；<b>周末 / 放假连休日→普通休息</b>(无底薪、不影响全勤)；<b>工作日→缺勤</b>(当月全勤清零)。当月未来日期暂不算缺勤。<br>
-        5. 打卡页可手动选 <b>「缺勤」</b> 记录某天缺勤（不用填工时）；缺勤一律清零全勤奖，休息日/节假日记缺勤也同样清零。</p>
+        5. 打卡页可手动选 <b>「缺勤」</b> 记录某天缺勤（不用填工时）；缺勤一律清零全勤奖，休息日/节假日记缺勤也同样清零。<br>
+        6. 点「保存打卡」后<b>停留在打卡页</b>不回首页（方便接着录下一天），日期保持在刚存的那天；从记录页点「编辑」进去的，保存后回记录页。</p>
         <p>自动补卡只填充工作日；周末、法定节假日、放假连休日、已有记录的日期自动跳过。内置 2026–2029 节假日（调休补班日待官方发布后可用「联网更新」校正）；每月标准工时＝该月工作日×8，各月不同。</p>
+        <p><b>节假日改动会重算已有记录：</b>记录里存的是打卡当时的归类快照，所以新增 / 删除自定义节假日、或给它「切档」之后，程序会按新归类把全部记录的正常 / 平日 / 周末 / 节假日工时重新拆分，工资立刻更新，toast 里会告知重算了几条。</p>
       </div>
       <div class="card pad helpSec">
         <h3>🧮 工资计算公式</h3>
@@ -476,14 +512,17 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <p><b>有效出勤工时</b> = 正常出勤工时 + 法定节假日休息天数 × 8</p>
         <p><b>出勤比例</b> = min(有效出勤工时 ÷ 每月标准工时, 1)</p>
         <p>底薪 / 岗位补贴 / 绩效奖金 均乘以出勤比例；缺勤则全勤奖为 0，否则全额发放。</p>
-        <p><b>正常时薪</b> = 底薪 ÷ 加班时薪分母（默认 174，仅作参考显示）<br>
-        <b>加班工资</b> = 平日加班工时 × 平日加班时薪 + 周末加班工时 × 周末加班时薪 + 节假日加班工时 × 节假日加班时薪<br>
-        三个加班时薪是<b>设置里直接填的单价（元/小时）</b>，不再按底薪 × 倍数现算，所以调底薪不会改变加班单价。</p>
+        <p><b>正常时薪</b> = 底薪 ÷ 加班时薪分母（默认 174）<br>
+        <b>加班工资</b> = 平日加班工时 × 第1档时薪 + 周末加班工时 × 第2档时薪 + 节假日加班工时 × 第3档时薪</p>
+        <p><b>三档时薪怎么来 —— 设置里二选一，只会有一套参与计算：</b><br>
+        · <b>固定时薪</b>（默认）：直接在设置里填单价（元/小时），默认 23.28 / 31.03 / 46.55。单价<b>不随底薪变化</b>，适合按工资条上写死的加班单价算。<br>
+        · <b>底薪倍数</b>：单价 = 底薪 ÷ 加班时薪分母 × 倍数（默认 1.5 / 2 / 3）。单价<b>跟着底薪浮动</b>，适合公司按法定倍数发加班费。<br>
+        两套参数都会保存，切换方式不丢值；没生效的那一套在设置页灰显并标注「未参与计算」，<b>永远不会同时参与计算</b>。</p>
         <p><b>餐补</b> = min(上班打卡天数 × 每日餐补, 餐补上限)；社保为固定扣除。</p>
       </div>
       <div class="card pad helpSec">
         <h3>⚙️ 默认参数一览</h3>
-        <p>底薪 2700 元 · 平日加班时薪 23.28 元/h · 周末加班时薪 31.03 元/h · 法定节假日加班时薪 46.55 元/h · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 每月标准工时＝该月工作日×8 · 自动补卡工时 11 小时。</p>
+        <p>底薪 2700 元 · 加班费默认按<b>固定时薪</b>：平日 23.28 / 周末 31.03 / 法定节假日 46.55 元/小时 · 备用的<b>底薪倍数</b>模式为 1.5 / 2 / 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 加班时薪分母 174h · 每月标准工时＝该月工作日×8 · 自动补卡工时 11 小时。</p>
       </div>
       <div class="card pad helpSec">
         <h3>📋 记录导出格式</h3>
@@ -565,13 +604,14 @@ var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:�
 var DEFAULTS = {
   base:2700, social:420, full:100, perf:50, post:400,
   meal:15, mealCap:360, std:174, auto:11,
-  stdOt:174,        /* 加班时薪分母：现在只用来显示「正常时薪 = 底薪 ÷ stdOt」，不参与加班费计算 */
-  /* 三档加班时薪（元/小时）：直接写死的单价，加班费 = 加班工时 × 对应单价，
-   * 不再用「底薪 ÷ 分母 × 倍数」现算 —— 这样底薪调整不会悄悄改变加班单价。
-   * 默认值 = 2700 ÷ 174 × 1.5 / 2 / 3 四舍五入到分，即工资条上的加班单价。 */
-  otRate1:23.28,    /* 平日加班 */
-  otRate2:31.03,    /* 周末 / 放假连休日加班 */
-  otRate3:46.55,    /* 法定节假日当天加班 */
+  stdOt:174,        /* 加班时薪分母：倍数模式下是「底薪÷分母×倍数」的分母；固定时薪模式下只用于显示参考正常时薪 */
+  /* ---- 加班费两套参数，二选一（由 otMode 决定），永远只有一套参与计算 ----
+   * otMode:'rate' 固定时薪（元/小时），直接乘工时；默认值 = 2700÷174×1.5/2/3 四舍五入到分
+   * otMode:'mult' 底薪倍数，加班费 = 底薪÷stdOt × 倍数 × 工时（跟着底薪浮动）
+   * 两套值都完整保存，切换时不会丢；未参与计算的那套在设置页灰显并标注。 */
+  otMode:'rate',
+  ot1:1.5, ot2:2, ot3:3,                        /* 倍数模式：平日 / 周末 / 法定 */
+  otRate1:23.28, otRate2:31.03, otRate3:46.55,  /* 固定时薪模式：平日 / 周末 / 法定 */
   stdBase:'monthly', /* 底薪折算分母：'monthly'=当月排班工时(工作日×8)；'fixed'=用 std */
   taxOn:false,      /* 是否计算个税 */
   taxThr:5000,      /* 个税起征点（月） */
@@ -814,6 +854,43 @@ function isHoliOff(dateStr){
   var p = dateStr.split('-'); var off = HOLI_OFF[p[0]] || {}; return !!off[p[1]+'-'+p[2]];
 }
 
+/* ---------------- 加班时薪：两套参数二选一（唯一入口） ----------------
+ * 全站（计算 / 首页 / 打卡预览 / 节假日档位 / 设置提示）都只走 otRatesFor()，
+ * 由它按 otMode 挑一套换算成「生效时薪（元/小时）」，所以两套永远不会同时参与计算。 */
+function otModeOf(S){
+  S = S || getSet();
+  return (S.otMode === 'mult') ? 'mult' : 'rate';
+}
+function otRatesFor(ym, S){
+  S = S || getSet();
+  var stdOt = (S.stdOt > 0) ? +S.stdOt : 174;
+  var hourly = 0;
+  if (otModeOf(S) === 'mult'){
+    var base = baseFor(ym || _curYM, S);
+    hourly = (stdOt > 0) ? (base / stdOt) : (base / 174);
+    var m1 = isFinite(S.ot1) ? +S.ot1 : 1.5;
+    var m2 = isFinite(S.ot2) ? +S.ot2 : 2;
+    var m3 = isFinite(S.ot3) ? +S.ot3 : 3;
+    return {mode:'mult', hourly:hourly, m1:m1, m2:m2, m3:m3,
+      r1: hourly * m1, r2: hourly * m2, r3: hourly * m3};
+  }
+  hourly = (stdOt > 0) ? (baseFor(ym || _curYM, S) / stdOt) : 0;
+  return {mode:'rate', hourly:hourly, m1:0, m2:0, m3:0,
+    r1: isFinite(S.otRate1) ? +S.otRate1 : 23.28,
+    r2: isFinite(S.otRate2) ? +S.otRate2 : 31.03,
+    r3: isFinite(S.otRate3) ? +S.otRate3 : 46.55};
+}
+function otEff(R, i){ return (i === 1) ? R.r1 : ((i === 2) ? R.r2 : R.r3); }
+function otMult(R, i){ return (i === 1) ? R.m1 : ((i === 2) ? R.m2 : R.m3); }
+/* 展示用：倍数模式显示「1.5 倍 = 23.28 元/h」，固定时薪模式只显示单价 */
+function otNote(R, i){
+  var eff = fmtRate(otEff(R, i));
+  if (R.mode === 'mult') return fmtN(otMult(R, i)) + ' 倍 = ' + eff + ' 元/h';
+  return eff + ' 元/h';
+}
+/* 倍数可以是 1.5 / 2 / 3，别显示成 1.50 倍 */
+function fmtN(v){ v = isFinite(v) ? v : 0; return String(Math.round(v * 1000) / 1000); }
+
 /* 工时拆分 */
 function splitHours(dateStr, type, hours){
   var n=0, d=0, w=0, h=0;
@@ -1048,16 +1125,21 @@ function calcMonth(ym){
   m.post = money2(S.post * ratio);
   m.perf = money2(S.perf * ratio);
   m.full = hasAbsent ? 0 : money2(S.full);
-  /* 三档加班时薪（元/小时）：直接取设置里的单价，不参与底薪折算。
-   * 平日 rate1 / 周末与放假连休日 rate2 / 法定节假日当天 rate3 */
-  var rate1 = isFinite(S.otRate1) ? +S.otRate1 : 23.28;
-  var rate2 = isFinite(S.otRate2) ? +S.otRate2 : 31.03;
-  var rate3 = isFinite(S.otRate3) ? +S.otRate3 : 46.55;
-  var otWd  = money2(sum.wd  * rate1);
-  var otWe  = money2(sum.we  * rate2);
-  var otHol = money2(sum.hol * rate3);
+  /* 三档加班时薪（元/小时）：由 otRatesFor 按 otMode 挑一套，两套互斥。
+   * rate 模式 = 设置里填的固定单价；mult 模式 = 底薪 ÷ 分母 × 倍数（跟着底薪浮动）。 */
+  var R = otRatesFor(ym, S);
+  var otWd  = money2(sum.wd  * R.r1);
+  var otWe  = money2(sum.we  * R.r2);
+  var otHol = money2(sum.hol * R.r3);
   m.otWd = otWd; m.otWe = otWe; m.otHol = otHol;
-  m.otRate1 = rate1; m.otRate2 = rate2; m.otRate3 = rate3;
+  /* 让返回值与 otRatesFor 结构一致，首页/提示里可直接 otNote(m, i) 取文案 */
+  m.mode = R.mode;
+  m.otMode = R.mode;
+  m.r1 = R.r1; m.r2 = R.r2; m.r3 = R.r3;
+  m.m1 = R.m1; m.m2 = R.m2; m.m3 = R.m3;
+  m.eff1 = R.r1; m.eff2 = R.r2; m.eff3 = R.r3;   /* 生效时薪（元/小时） */
+  m.ot1 = R.m1; m.ot2 = R.m2; m.ot3 = R.m3;      /* mult 模式下的倍数（rate 模式为 0） */
+  m.otRate1 = R.r1; m.otRate2 = R.r2; m.otRate3 = R.r3;
   m.otMoney = money2(otWd + otWe + otHol);
   m.meal = money2(Math.min(sum.mealDays * S.meal, S.mealCap));
   m.social = money2(S.social);
@@ -1107,9 +1189,9 @@ function refreshHome(){
     inc += rowHtml('绩效奖金', fmtMoney(m.perf));
     inc += rowHtml('全勤奖' + (su.absent>0 ? '（有缺勤→0）' : ''), fmtMoney(m.full), su.absent>0?'':'green');
     inc += rowHtml('加班工资', fmtMoney(m.otMoney));
-    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h × ' + fmtRate(m.otRate1) + ' 元/h', fmtMoney(m.otWd), 'muted');
-    inc += rowHtml('　· 周末/假期休息日 ' + fmtH(su.we) + 'h × ' + fmtRate(m.otRate2) + ' 元/h', fmtMoney(m.otWe), 'muted');
-    inc += rowHtml('　· 法定当天 ' + fmtH(su.hol) + 'h × ' + fmtRate(m.otRate3) + ' 元/h', fmtMoney(m.otHol), 'muted');
+    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h × ' + otNote(m, 1), fmtMoney(m.otWd), 'muted');
+    inc += rowHtml('　· 周末/假期休息日 ' + fmtH(su.we) + 'h × ' + otNote(m, 2), fmtMoney(m.otWe), 'muted');
+    inc += rowHtml('　· 法定当天 ' + fmtH(su.hol) + 'h × ' + otNote(m, 3), fmtMoney(m.otHol), 'muted');
     inc += rowHtml('餐补（' + su.mealDays + '天 × ' + S.meal + '，上限' + S.mealCap + '）', fmtMoney(m.meal));
     inc += rowHtml('应发工资', fmtMoney(m.taxBase));
     inc += rowHtml('社保扣除', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
@@ -1128,9 +1210,10 @@ function refreshHome(){
 
     var hs = '';
     hs += rowHtml('底薪折算分母（当月排班）', fmtH(m.stdBase) + ' h');
-    hs += rowHtml('平日加班时薪', fmtRate(m.otRate1) + ' 元/h');
-    hs += rowHtml('周末加班时薪', fmtRate(m.otRate2) + ' 元/h');
-    hs += rowHtml('法定加班时薪', fmtRate(m.otRate3) + ' 元/h');
+    hs += rowHtml('加班计算方式', (m.otMode === 'mult') ? '底薪倍数（÷' + fmtH(m.stdOt) + 'h×倍数）' : '固定时薪（元/小时）');
+    hs += rowHtml('平日加班时薪', otNote(m, 1));
+    hs += rowHtml('周末加班时薪', otNote(m, 2));
+    hs += rowHtml('法定加班时薪', otNote(m, 3));
     hs += rowHtml('参考：正常时薪（底薪÷' + fmtH(m.stdOt) + 'h）', fmtRate(m.hourly) + ' 元/h');
     hs += rowHtml('实际出勤工时（正常出勤）', fmtH(su.normal) + ' h');
     hs += rowHtml('法定休息折算（' + su.legalRest + '天×8h）', fmtH(su.legalRest*8) + ' h');
@@ -1143,7 +1226,7 @@ function refreshHome(){
     hs += rowHtml('缺勤天数', su.absent + ' 天');
     $('hoursRows').innerHTML = hs;
     var hh = '按「工作日8h内计正常出勤、超出计平日加班；周末与放假连休日全部计周末加班；法定当天全部计节假日加班」拆分，'
-      + '加班费 = 加班工时 × 对应档位的固定时薪；'
+      + '加班费 = 加班工时 × 生效时薪（' + ((m.otMode === 'mult') ? '底薪倍数模式，单价跟着底薪浮动' : '固定时薪模式，单价在设置里填死') + '）；'
       + (offlineWorkdays(_curYM) > 0 ? '本月工作日(内置含调休)约 ' + offlineWorkdays(_curYM) + ' 天。' : '');
     $('hoursHint').textContent = hh;
 
@@ -1200,11 +1283,11 @@ function autoSuggestType(dateStr){
 }
 function punchCatText(dateStr){
   var c = classify(dateStr);
-  var S = getSet();
-  if (c.type === 'holiday') return (c.custom ? '自定义·节假日加班档' : '法定节假日') + '(' + fmtRate(S.otRate3) + ' 元/h) · ' + c.name;
-  if (c.type === 'holiday_rest') return '放假连休日(' + fmtRate(S.otRate2) + ' 元/h) · ' + c.name;
-  if (c.type === 'weekend') return (c.custom ? '自定义·周末加班档' : '周末') + '(' + fmtRate(S.otRate2) + ' 元/h)' + (c.name ? ' · ' + c.name : '');
-  return '工作日(平日加班 ' + fmtRate(S.otRate1) + ' 元/h)';
+  var R = otRatesFor(String(dateStr).substring(0,7));
+  if (c.type === 'holiday') return (c.custom ? '自定义·节假日加班档' : '法定节假日') + '(' + otNote(R, 3) + ') · ' + c.name;
+  if (c.type === 'holiday_rest') return '放假连休日(' + otNote(R, 2) + ') · ' + c.name;
+  if (c.type === 'weekend') return (c.custom ? '自定义·周末加班档' : '周末') + '(' + otNote(R, 2) + ')' + (c.name ? ' · ' + c.name : '');
+  return '工作日(平日加班 ' + otNote(R, 1) + ')';
 }
 /* 保存按钮文案跟着类型走：缺勤不需要填工时，动词也改掉，避免误存 */
 function punchSaveLabel(type){
@@ -1214,10 +1297,10 @@ function punchSaveLabel(type){
     btn.textContent = _editDate ? '保存修改' : (t === 'absent' ? '记录缺勤' : '保存打卡');
   }catch(e){}
 }
-function resetPunchForm(){
+function resetPunchForm(keepDate){
   _editDate = '';
   _manualType = true;   // 只保留“上班打卡”，不自动切换类型
-  var t = todayStr();
+  var t = keepDate || todayStr();
   var dEl = $('pDate'); if (dEl) dEl.value = t;
   $('pNote').value = '';
   $('pHours').value = 8;
@@ -1274,19 +1357,17 @@ function punchChanged(){
   try{
     var ds = $('pDate').value;
     if (!ds) return;
-    var S = getSet();
-    var r1 = isFinite(S.otRate1) ? +S.otRate1 : 23.28;
-    var r2 = isFinite(S.otRate2) ? +S.otRate2 : 31.03;
-    var r3 = isFinite(S.otRate3) ? +S.otRate3 : 46.55;
+    var R = otRatesFor(ds.substring(0,7));
+    var n1 = otNote(R, 1), n2 = otNote(R, 2), n3 = otNote(R, 3);
     var c = classify(ds);
     $('pCat').textContent = punchCatText(ds);
     var note = '';
     if (c.type==='holiday') note = c.custom
-      ? '当天为自定义节假日（节假日加班档）：上班全部计节假日加班（' + fmtRate(r3) + ' 元/h）'
-      : '当天为法定节假日：上班全部计节假日加班（' + fmtRate(r3) + ' 元/h）';
-    else if (c.type==='holiday_rest') note = '当天为放假连休日（非法定）：上班按休息日计周末加班（' + fmtRate(r2) + ' 元/h），不计正常出勤';
-    else if (c.type==='weekend') note = (c.custom ? '当天为自定义休息日（周末加班档）' : '当天为周末') + '：上班全部计周末加班（' + fmtRate(r2) + ' 元/h），不计正常出勤';
-    else note = '当天为工作日：8h 内计正常出勤，超出部分计平日加班（' + fmtRate(r1) + ' 元/h）';
+      ? '当天为自定义节假日（节假日加班档）：上班全部计节假日加班（' + n3 + '）'
+      : '当天为法定节假日：上班全部计节假日加班（' + n3 + '）';
+    else if (c.type==='holiday_rest') note = '当天为放假连休日（非法定）：上班按休息日计周末加班（' + n2 + '），不计正常出勤';
+    else if (c.type==='weekend') note = (c.custom ? '当天为自定义休息日（周末加班档）' : '当天为周末') + '：上班全部计周末加班（' + n2 + '），不计正常出勤';
+    else note = '当天为工作日：8h 内计正常出勤，超出部分计平日加班（' + n1 + '）';
     $('pCatNote').textContent = note;
     var hours = parseFloat(($('pHours').value || '0').toString().replace(',', '.'));
     var pv = $('pPreview');
@@ -1294,10 +1375,10 @@ function punchChanged(){
       var sp = splitHours(ds, 'work', hours);
       var parts = [];
       if (sp.n>0) parts.push('正常出勤 ' + fmtH(sp.n) + 'h');
-      if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（' + fmtRate(r1) + ' 元/h）');
-      if (sp.w>0) parts.push((c.type==='holiday_rest'?'休息日加班 ':'周末加班 ') + fmtH(sp.w) + 'h（' + fmtRate(r2) + ' 元/h）');
-      if (sp.h>0) parts.push('节假日加班 ' + fmtH(sp.h) + 'h（' + fmtRate(r3) + ' 元/h）');
-      var otPay = money2(sp.d*r1 + sp.w*r2 + sp.h*r3);
+      if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（' + n1 + '）');
+      if (sp.w>0) parts.push((c.type==='holiday_rest'?'休息日加班 ':'周末加班 ') + fmtH(sp.w) + 'h（' + n2 + '）');
+      if (sp.h>0) parts.push('节假日加班 ' + fmtH(sp.h) + 'h（' + n3 + '）');
+      var otPay = money2(sp.d*R.r1 + sp.w*R.r2 + sp.h*R.r3);
       pv.textContent = '将记入：' + (parts.length?parts.join(' + '):'0h（请确认工时）')
         + (otPay > 0 ? '　→ 加班费 ' + fmtMoney(otPay) : '');
     } else if (_curType === 'holiday'){
@@ -1377,7 +1458,15 @@ function doCommitPunch(rec){
     toast('已' + (wasEdit ? '保存修改' : '记录打卡') + '：' + rec.date + ' ' + TYPE_META[rec.type].t + (replaced?'（覆盖）':''));
     var m = rec.date.substring(0,7);
     if (m !== _curYM){ _curYM = m; }
-    if (wasEdit){ showPage('records'); } else { showPage('home'); }
+    if (wasEdit){
+      showPage('records');          // 从记录页进来的，改完回记录页
+    } else {
+      /* 保存后留在打卡页，方便接着录下一天；日期保持在刚存的那天便于核对 */
+      resetPunchForm(rec.date);
+      showPage('punch');
+      punchChanged();
+    }
+    refreshHome();                  // 无论停在哪一页，首页统计都同步刷新
   }catch(e){ toast('写入失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
 function punchBack(){
@@ -1748,12 +1837,17 @@ function renderDivMode(ym){
   var monthly = (map[ym] > 0) ? map[ym] : (wd > 0 ? wd * 8 : 0);
   var otEl = $('uStdOt');
   if (otEl){
-    otEl.innerHTML = '只用来显示参考值「正常时薪 = 底薪 ÷ <b>' + (S.stdOt || 174) + 'h</b> = '
-      + fmtMoney(money2((S.base || 0) / (S.stdOt || 174))) + '」，<b>不参与加班费计算</b>。'
-      + '<br>174 = 21.75 天 × 8（《劳动法》月计薪天数）。加班费走「加班时薪（元/小时）」那一栏。'
-      + '<br>现在加班时薪：平日 ' + fmtRate(isFinite(S.otRate1) ? S.otRate1 : 23.28) + ' · 周末 '
-      + fmtRate(isFinite(S.otRate2) ? S.otRate2 : 31.03) + ' · 法定 '
-      + fmtRate(isFinite(S.otRate3) ? S.otRate3 : 46.55) + ' 元/h。';
+    var mode = otModeOf(S);
+    if (mode === 'mult'){
+      otEl.innerHTML = '<b>底薪倍数模式正在用这个分母</b>：单价 = 底薪 ÷ <b>' + (S.stdOt || 174) + 'h</b> × 倍数。'
+        + '<br>' + (S.stdOt || 174) + ' = 21.75 天 × 8（《劳动法》月计薪天数），公司工资条的加班单价通常按这个折算。'
+        + '<br>不参与底薪折算（那是下面「底薪折算分母」的事）。';
+    } else {
+      otEl.innerHTML = '只用来显示参考值「正常时薪 = 底薪 ÷ <b>' + (S.stdOt || 174) + 'h</b> = '
+        + fmtMoney(money2(baseFor(_curYM, S) / (S.stdOt || 174))) + '」，<b>当前不参与加班费计算</b>。'
+        + '<br>' + (S.stdOt || 174) + ' = 21.75 天 × 8（《劳动法》月计薪天数）。'
+        + '<br>当前是固定时薪模式；切到「底薪倍数」模式后，这个分母就会参与加班单价换算。';
+    }
   }
   var bEl = $('uStd');
   if (bEl){
@@ -1806,6 +1900,50 @@ function setBaseDiv(mode){
     refreshHome();
   }catch(e){ toast('切换失败：' + (e && e.message ? e.message : e), 'bad'); }
 }
+/* 从表单收集全部参数。两套加班参数都收集，切换模式时不丢值。
+ * otMode / stdBase 由各自的即时按钮维护，这里从已存设置里带过来。 */
+function collectSettings(){
+  function gv(id, dflt){ var v = parseFloat(($(id).value || '').toString().replace(',', '.')); return isFinite(v) ? v : dflt; }
+  var prev = getSet();
+  return {
+    base: Math.max(0, gv('sBase', 2700)),
+    otMode: otModeOf(prev),
+    ot1: Math.max(0, gv('sOT1', 1.5)),
+    ot2: Math.max(0, gv('sOT2', 2)),
+    ot3: Math.max(0, gv('sOT3', 3)),
+    otRate1: Math.max(0, gv('sRate1', 23.28)),
+    otRate2: Math.max(0, gv('sRate2', 31.03)),
+    otRate3: Math.max(0, gv('sRate3', 46.55)),
+    social: Math.max(0, gv('sSocial', 420)),
+    taxOn: (($('sTaxOn').value === 'on')),
+    taxThr: Math.max(0, gv('sTaxThr', 5000)),
+    taxRate: Math.max(0, gv('sTaxRate', 0.03)),
+    full: Math.max(0, gv('sFull', 100)),
+    perf: Math.max(0, gv('sPerf', 50)),
+    post: Math.max(0, gv('sPost', 400)),
+    meal: Math.max(0, gv('sMeal', 15)),
+    mealCap: Math.max(0, gv('sMealCap', 360)),
+    std: Math.max(1, gv('sStd', 174)),
+    stdOt: Math.max(1, gv('sStdOt', 174)),
+    stdBase: (prev.stdBase === 'fixed') ? 'fixed' : 'monthly',
+    auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
+  };
+}
+/* 加班计算方式即时切换：先把表单现值收进来一起存，避免刚改的数字被覆盖 */
+function setOtMode(mode){
+  try{
+    var s = collectSettings();
+    s.otMode = (mode === 'mult') ? 'mult' : 'rate';
+    setSet(s);
+    var bm = getBaseMap();
+    bm[_curYM] = s.base;
+    setBaseMap(bm);
+    renderSettings();
+    refreshHome();
+    toast('加班费已切换为「' + (s.otMode === 'mult' ? '底薪倍数' : '固定时薪') + '」'
+      + '（另一套参数保留但不参与计算）', 'good');
+  }catch(e){ toast('切换失败：' + (e && e.message ? e.message : e), 'bad'); }
+}
 function renderSettings(){
   try{
     var S = getSet();
@@ -1818,6 +1956,9 @@ function renderSettings(){
     $('sRate1').value = isFinite(S.otRate1) ? S.otRate1 : 23.28;
     $('sRate2').value = isFinite(S.otRate2) ? S.otRate2 : 31.03;
     $('sRate3').value = isFinite(S.otRate3) ? S.otRate3 : 46.55;
+    $('sOT1').value = isFinite(S.ot1) ? S.ot1 : 1.5;
+    $('sOT2').value = isFinite(S.ot2) ? S.ot2 : 2;
+    $('sOT3').value = isFinite(S.ot3) ? S.ot3 : 3;
     $('sPost').value = S.post;
     $('sPerf').value = S.perf;
     $('sFull').value = S.full;
@@ -1826,12 +1967,8 @@ function renderSettings(){
     $('sTaxThr').value = isFinite(S.taxThr) ? S.taxThr : 5000;
     $('sTaxRate').value = isFinite(S.taxRate) ? S.taxRate : 0.03;
     renderTaxHint();
-    var map = getStdMap();
-    $('uBase').textContent = '底薪 / 岗位补贴 / 绩效 按「有效出勤 ÷ 底薪折算分母」折算；加班费按「加班工时 × 对应档位的加班时薪」';
-    var uo = $('uOtRate');
-    if (uo) uo.innerHTML = '加班费 = 加班工时 × 上面的时薪，<b>不再按倍数从底薪现算</b>——改了底薪也不会悄悄改加班单价，需要时来这里改时薪。'
-      + '<br>默认值 23.28 / 31.03 / 46.55 = 底薪 2700 ÷ 174 × 1.5 / 2 / 3 四舍五入到分（与工资条加班单价一致）。'
-      + '<br>档位对应：平日加班 → 第 1 档；周末、放假连休日、自定义「周末加班档」→ 第 2 档；法定节假日当天、自定义「节假日加班档」→ 第 3 档。';
+    $('uBase').textContent = '底薪 / 岗位补贴 / 绩效 按「有效出勤 ÷ 底薪折算分母」折算；加班费按下方选定的那一种方式计算。';
+    renderOtModeUI();
     renderBaseNote();
     renderDivMode(_curYM);
     $('uAuto').textContent = '补卡默认拆分：8h 正常出勤 + 其余按平日加班';
@@ -1839,35 +1976,59 @@ function renderSettings(){
     renderThemeDots();
   }catch(e){ toast('设置页加载失败', 'bad'); }
 }
+/* 模式按钮高亮 + 生效/未生效标注 + 两组的灰显，全部集中在这里 */
+function renderOtModeUI(){
+  try{
+    var S = getSet();
+    var mode = otModeOf(S);
+    var row = $('otModeRow');
+    if (row){
+      var btns = row.querySelectorAll('.typeItem');
+      for (var i=0;i<btns.length;i++){
+        btns[i].className = 'typeItem' + (btns[i].getAttribute('data-m')===mode ? ' on' : '');
+      }
+    }
+    var blkR = $('blkRate'), blkM = $('blkMult');
+    if (blkR) blkR.className = 'modeBlock ' + (mode === 'rate' ? 'on' : 'off');
+    if (blkM) blkM.className = 'modeBlock ' + (mode === 'mult' ? 'on' : 'off');
+    var tagR = $('tagRate'), tagM = $('tagMult');
+    if (tagR) tagR.textContent = (mode === 'rate') ? '✅ 生效中' : '未参与计算';
+    if (tagM) tagM.textContent = (mode === 'mult') ? '✅ 生效中' : '未参与计算';
+
+    var R = otRatesFor(_curYM, S);
+    var uo = $('uOtMode');
+    if (uo) uo.innerHTML = '加班费 = 加班工时 × 生效时薪。当前生效的是<b>'
+      + (mode === 'mult' ? '底薪倍数' : '固定时薪') + '</b>，另一套参数保留但<b>不参与任何计算</b>。';
+
+    var u = $('uOtRate');
+    if (u){
+      var html = '三档对应：平日 → 第 1 档；周末 / 放假连休日 / 自定义「周末加班档」→ 第 2 档；法定节假日当天 / 自定义「节假日加班档」→ 第 3 档。';
+      if (mode === 'mult'){
+        html += '<br><b>底薪倍数模式</b>：单价 = 底薪 ÷ ' + fmtH(S.stdOt || 174) + 'h × 倍数 = '
+          + fmtMoney(R.hourly) + ' × 倍数（' + ymLabel(_curYM) + ' 的底薪 '
+          + fmtMoney(baseFor(_curYM, S)) + '）→ 平日 ' + otNote(R, 1) + ' · 周末 ' + otNote(R, 2)
+          + ' · 法定 ' + otNote(R, 3) + '。底薪一变，单价跟着变。';
+      } else {
+        html += '<br><b>固定时薪模式</b>：单价就是上面填的数字，<b>不随底薪变化</b>。'
+          + '<br>默认 23.28 / 31.03 / 46.55 = 底薪 2700 ÷ 174 × 1.5 / 2 / 3 四舍五入到分（与工资条加班单价一致）。'
+          + '<br>想让它跟着底薪浮动，就切到「底薪倍数」。';
+      }
+      u.innerHTML = html;
+    }
+  }catch(e){}
+}
 function saveSettings(){
   try{
-    function gv(id, dflt){ var v = parseFloat(($(id).value || '').toString().replace(',', '.')); return isFinite(v) ? v : dflt; }
-    var s = {
-      base: Math.max(0, gv('sBase', 2700)),
-      otRate1: Math.max(0, gv('sRate1', 23.28)),
-      otRate2: Math.max(0, gv('sRate2', 31.03)),
-      otRate3: Math.max(0, gv('sRate3', 46.55)),
-      social: Math.max(0, gv('sSocial', 420)),
-      taxOn: (($('sTaxOn').value === 'on')),
-      taxThr: Math.max(0, gv('sTaxThr', 5000)),
-      taxRate: Math.max(0, gv('sTaxRate', 0.03)),
-      full: Math.max(0, gv('sFull', 100)),
-      perf: Math.max(0, gv('sPerf', 50)),
-      post: Math.max(0, gv('sPost', 400)),
-      meal: Math.max(0, gv('sMeal', 15)),
-      mealCap: Math.max(0, gv('sMealCap', 360)),
-      std: Math.max(1, gv('sStd', 174)),
-      stdOt: Math.max(1, gv('sStdOt', 174)),
-      stdBase: (getSet().stdBase === 'fixed') ? 'fixed' : 'monthly',
-      auto: Math.min(24, Math.max(0.5, gv('sAuto', 11)))
-    };
+    var s = collectSettings();
     setSet(s);
     /* 底薪按月落库：写入「当前查看的月份」，调薪切月保存后不影响历史月份 */
     var bm = getBaseMap();
     bm[_curYM] = s.base;
     setBaseMap(bm);
     $('autoHrInfo').textContent = s.auto;
-    toast('设置已保存（底薪 ' + fmtMoney(s.base) + ' 已记入 ' + ymLabel(_curYM) + '）', 'good');
+    renderOtModeUI();
+    toast('设置已保存（底薪 ' + fmtMoney(s.base) + ' 已记入 ' + ymLabel(_curYM)
+      + '，加班费按「' + (s.otMode === 'mult' ? '底薪倍数' : '固定时薪') + '」计算）', 'good');
     refreshHome();
   }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
@@ -1930,12 +2091,15 @@ function resetNetBtn(btn){
 
 /* ---------------- 法定节假日管理 ---------------- */
 /* ---------------- 自定义节假日 ---------------- */
-var _holiKind = 'holiday';   // 'weekend'=周末加班档(rate2) / 'holiday'=节假日加班档(rate3)
+var _holiKind = 'holiday';   // 'weekend'=周末加班档(第2档) / 'holiday'=节假日加班档(第3档)
+/* 档位对应的生效时薪：走 otRatesFor，所以倍数模式和固定时薪模式都自动正确 */
 function holiRateOf(kind){
-  var S = getSet();
-  return (kind === 'weekend')
-    ? (isFinite(S.otRate2) ? +S.otRate2 : 31.03)
-    : (isFinite(S.otRate3) ? +S.otRate3 : 46.55);
+  var R = otRatesFor(_curYM);
+  return (kind === 'weekend') ? R.r2 : R.r3;
+}
+function holiRateTxt(kind){
+  var R = otRatesFor(_curYM);
+  return otNote(R, (kind === 'weekend') ? 2 : 3);
 }
 function pickHoliKind(kind){
   _holiKind = (kind === 'weekend') ? 'weekend' : 'holiday';
@@ -1950,13 +2114,15 @@ function paintHoliKind(){
         btns[i].className = 'typeItem' + (btns[i].getAttribute('data-k')===_holiKind ? ' on' : '');
       }
     }
+    var R = otRatesFor(_curYM);
     var dw = $('holiKindDsW'), dh = $('holiKindDsH');
-    if (dw) dw.textContent = fmtRate(holiRateOf('weekend')) + ' 元/h';
-    if (dh) dh.textContent = fmtRate(holiRateOf('holiday')) + ' 元/h';
+    if (dw) dw.textContent = otNote(R, 2);
+    if (dh) dh.textContent = otNote(R, 3);
     var u = $('uHoliKind');
     if (u) u.innerHTML = '同一档期里，连休/周末性质的那几天选<b>周末加班档</b>，公司按法定标准算的那一天选<b>节假日加班档</b>。'
-      + '<br>两档只影响上班时的加班时薪（' + fmtRate(holiRateOf('weekend')) + ' / ' + fmtRate(holiRateOf('holiday')) + ' 元/h）；'
-      + '不打卡时都按休息处理，不计缺勤。';
+      + '<br>两档只影响上班时的加班时薪（周末档 ' + otNote(R, 2) + ' / 节假日档 ' + otNote(R, 3) + '）；'
+      + '不打卡时都按休息处理，不计缺勤。'
+      + '<br>改动后<b>已有打卡记录会按新归类重算</b>，工资立即更新。';
   }catch(e){}
 }
 function renderHolidays(){
@@ -1972,7 +2138,7 @@ function renderHolidays(){
         var kt = (kd === 'weekend') ? '周末加班档' : '节假日加班档';
         var mid = cs[i].date + '-' + cs[i].name;
         cHtml += '<div class="listRow"><span style="color:var(--ink2);">' + cs[i].date + ' <b style="color:var(--ink);">' + esc(cs[i].name) + '</b>' +
-          '<br><span style="font-size:11px;color:var(--ink3);">' + kt + ' · ' + fmtRate(holiRateOf(kd)) + ' 元/h</span></span>' +
+          '<br><span style="font-size:11px;color:var(--ink3);">' + kt + ' · ' + holiRateTxt(kd) + '</span></span>' +
           '<span style="white-space:nowrap;">' +
           '<button type="button" class="opBtn" onclick="window.toggleCustomKind(\'' + mid + '\')">切档</button>' +
           '<button type="button" class="opBtn del" onclick="window.delCustomHoliday(\'' + cs[i].date + '\')">删除</button>' +
@@ -2010,6 +2176,39 @@ function renderHolidays(){
     $('holiBuiltinWrap').innerHTML = bHtml;
   }catch(e){ toast('节假日管理加载失败', 'bad'); }
 }
+/* 按「当前」节假日规则重算所有记录的正常/平日/周末/节假日工时。
+ * 记录里存的 n/d/w/h 是打卡当时的快照，新增或改动自定义节假日之后必须重算，
+ * 否则工资还按旧归类算（这正是"加了节假日工资不变"的原因）。
+ * 返回被改动的记录条数。 */
+function resplitRecords(){
+  var changed = 0;
+  try{
+    var recs = getRecs();
+    for (var i=0;i<recs.length;i++){
+      var r = recs[i];
+      if (!r || !r.date || !r.type) continue;
+      var oldSum = (+r.n||0) + (+r.d||0) + (+r.w||0) + (+r.h||0);
+      var hrs = parseFloat(r.hours);
+      /* 工时缺失但已有拆分值的旧记录：不要被清零，保留原样 */
+      if (r.type === 'work' && !(isFinite(hrs) && hrs > 0) && oldSum > 0) continue;
+      var sp = splitHours(r.date, r.type, isFinite(hrs) ? hrs : 0);
+      var isH = isHoliDate(r.date) ? 1 : 0;
+      var isW = isWeekend(r.date) ? 1 : 0;
+      if (r.n !== sp.n || r.d !== sp.d || r.w !== sp.w || r.h !== sp.h || r.isHoliday !== isH || r.isWeekend !== isW) changed++;
+      r.n = sp.n; r.d = sp.d; r.w = sp.w; r.h = sp.h;
+      r.isHoliday = isH; r.isWeekend = isW;
+    }
+    if (changed) setRecs(recs);
+  }catch(e){}
+  return changed;
+}
+/* 节假日改动后统一调用：重算记录 + 刷新首页工资 */
+function afterHolidayChange(){
+  var n = resplitRecords();
+  refreshHome();
+  return n;
+}
+
 function addHoliday(){
   try{
     var date = $('holiDate').value;
@@ -2024,9 +2223,10 @@ function addHoliday(){
     setCustom(cs);
     $('holiName').value = '';
     renderHolidays();
-    refreshHome();
+    var n = afterHolidayChange();
     var kt = (_holiKind === 'weekend') ? '周末加班档' : '节假日加班档';
-    toast('已添加：' + date + ' ' + name + '（' + kt + ' ' + fmtRate(holiRateOf(_holiKind)) + ' 元/h，立即生效）', 'good');
+    toast('已添加：' + date + ' ' + name + '（' + kt + ' ' + holiRateTxt(_holiKind) + '）'
+      + (n > 0 ? '，已重算 ' + n + ' 条打卡记录' : '，暂无记录需要重算'), 'good');
   }catch(e){ toast('添加失败', 'bad'); }
 }
 /* 切档：在「周末加班档」和「节假日加班档」之间切换，工资重算 */
@@ -2039,9 +2239,10 @@ function toggleCustomKind(mid){
     hit.kind = (hit.kind === 'weekend') ? 'holiday' : 'weekend';
     setCustom(cs);
     renderHolidays();
-    refreshHome();
+    var n = afterHolidayChange();
     var kt = (hit.kind === 'weekend') ? '周末加班档' : '节假日加班档';
-    toast(hit.date + ' 已切换为「' + kt + '」' + fmtRate(holiRateOf(hit.kind)) + ' 元/h', 'good');
+    toast(hit.date + ' 已切换为「' + kt + '」' + holiRateTxt(hit.kind)
+      + (n > 0 ? '，已重算 ' + n + ' 条打卡记录' : ''), 'good');
   }catch(e){ toast('切换失败', 'bad'); }
 }
 function delCustomHoliday(date){
@@ -2051,8 +2252,8 @@ function delCustomHoliday(date){
     for (var i=0;i<cs.length;i++){ if (cs[i].date === date){ gone = true; continue; } out.push(cs[i]); }
     setCustom(out);
     renderHolidays();
-    refreshHome();
-    toast(gone ? '已删除 ' + date + ' 的自定义节假日' : '未找到该节假日');
+    var n = afterHolidayChange();
+    toast(gone ? ('已删除 ' + date + ' 的自定义节假日' + (n > 0 ? '，已重算 ' + n + ' 条打卡记录' : '')) : '未找到该节假日');
   }catch(e){ toast('删除失败', 'bad'); }
 }
 
@@ -2101,6 +2302,7 @@ function boot(){
   try{
     initYM();
     applyTheme(getThemeKey());
+    resplitRecords();   /* 启动时把存量记录按当前节假日规则对齐（升级后历史数据也能算对） */
     resetPunchForm();
     refreshHome();
     refreshRecords();
@@ -2138,6 +2340,8 @@ window.saveSettings = saveSettings;
 window.askResetSettings = askResetSettings;
 window.netUpdateStd = netUpdateStd;
 window.setBaseDiv = setBaseDiv;
+window.setOtMode = setOtMode;              // 加班费计算方式切换（固定时薪 / 底薪倍数）
+window.resplitRecords = resplitRecords;    // 按当前节假日规则重算全部记录
 window.renderDivMode = renderDivMode;
 window.renderTaxHint = renderTaxHint;
 window.setTheme = setTheme;
