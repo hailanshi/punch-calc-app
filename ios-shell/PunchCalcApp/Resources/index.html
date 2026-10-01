@@ -1008,6 +1008,12 @@ function isWeekend(dateStr){
   return (d === 0 || d === 6);
 }
 function monthDays(y, m){ return new Date(y, m, 0).getDate(); }
+/* 记录页显示用：整数就不带小数点（HR 导入的工时都是整点，11 而不是 11.00），
+ * 出现小数（迟到 / 早退扣减的结果）才显示两位。 */
+function fmtHs(v){
+  var n = Math.round((isFinite(v) ? +v : 0) * 100) / 100;
+  return (Math.abs(n - Math.round(n)) < 0.005) ? String(Math.round(n)) : n.toFixed(2);
+}
 
 /* 日期归类：
  *  holiday      法定节假日当天（国家强制三倍工资，走「节假日加班时薪」）
@@ -1805,11 +1811,11 @@ function recRowHtml(r){
   var sub = '';
   if (r.type === 'work'){
     var parts = [];
-    parts.push('共 ' + fmtH(r.hours) + 'h');
-    if ((+r.n) > 0) parts.push('正常 ' + fmtH(r.n));
-    if ((+r.d) > 0) parts.push('平日加 ' + fmtH(r.d));
-    if ((+r.w) > 0) parts.push('周末加 ' + fmtH(r.w));
-    if ((+r.h) > 0) parts.push('节假加 ' + fmtH(r.h));
+    parts.push('共 ' + fmtHs(r.hours) + 'h');
+    if ((+r.n) > 0) parts.push('正常 ' + fmtHs(r.n));
+    if ((+r.d) > 0) parts.push('平日加 ' + fmtHs(r.d));
+    if ((+r.w) > 0) parts.push('周末加 ' + fmtHs(r.w));
+    if ((+r.h) > 0) parts.push('节假加 ' + fmtHs(r.h));
     sub = parts.join(' · ');
   } else if (r.type === 'holiday'){
     sub = '法定节假日休息（计入 8h 出勤）';
@@ -2932,7 +2938,7 @@ function hrStat(v){
   var n = Math.round((isFinite(v) ? v : 0) * 100) / 100;
   return (Math.abs(n - Math.round(n)) < 0.005) ? String(Math.round(n)) : n.toFixed(2);
 }
-/* 取某天的打卡时间文本，如 08:12 11:51 / 12:45 17:21 */
+/* 取某天的打卡时间文本，如 08:12 11:51 12:45 17:21 17:55 21:00 */
 function hrDayPunchText(card){
   if (!card) return '';
   var out = [];
@@ -2942,6 +2948,20 @@ function hrDayPunchText(card){
     out.push(String(v).slice(11, 16) + (card['is_buka' + t] === 'Y' ? '(补)' : ''));
   }
   return out.join(' ');
+}
+/* 记录页备注用的简短版：只写首末两次卡，避免每条记录备注过长
+ * （完整打卡时间在 HR 页明细里能看） */
+function hrPunchBrief(card){
+  if (!card) return '';
+  var a = [];
+  for (var t=1;t<=12;t++){
+    var v = card['card' + t];
+    if (!v) break;
+    a.push(String(v).slice(11, 16));
+  }
+  if (!a.length) return '';
+  if (a.length === 1) return a[0];
+  return a[0] + '~' + a[a.length - 1];
 }
 
 function hrRenderDays(d){
@@ -3138,7 +3158,7 @@ function hrBuildImport(d, dates){
     var c = cards[date];
     var hrs = hrDayHours(c);
     if (hrs <= 0){ skipped++; continue; }
-    var note = 'HR导入 ' + hrDayPunchText(c);
+    var note = 'HR导入 ' + hrPunchBrief(c);
     /* 站点把事假记在 calc_field19，导入的是打卡时长，标注出来方便人工核对 */
     var kg = kgMap[date];
     if (kg && hrNum(kg.calc_field19) > 0) note += '｜站点记为事假 ' + hrH(kg.calc_field19) + 'h，请自行核对';

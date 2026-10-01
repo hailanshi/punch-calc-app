@@ -697,6 +697,24 @@ ok('导入的是正班 8h（满勤整点）',
 const impCalc = S.calcMonth('2026-08');
 ok('导入的打卡记录参与工资计算（正班工时 > 0）', impCalc.sum.normal === 16, impCalc.sum.normal);
 ok('导入后该月记录数正确', impCalc.recCount === 2, impCalc.recCount);
+/* 导入的记录要真的出现在「打卡记录」页，且工时显示为整数 */
+S.setRecs([
+  { date: '2026-08-03', type: 'work', hours: 11, n: 8, d: 3, w: 0, h: 0, isHoliday: 0, isWeekend: 0, note: 'HR导入 08:20~21:00' }
+]);
+S._curYM = '2026-08';
+S.navTo('records');
+const recHtml = stub('recList').innerHTML;
+ok('导入的记录出现在记录页', recHtml.indexOf('08月03日') >= 0, recHtml.slice(0, 160));
+ok('记录页工时显示为整数 11 而非 11.00', recHtml.indexOf('共 11h') >= 0, recHtml.slice(0, 200));
+ok('记录页拆分也显示整数', recHtml.indexOf('正常 8') >= 0 && recHtml.indexOf('平日加 3') >= 0);
+ok('记录页保留 HR导入 备注', recHtml.indexOf('HR导入') >= 0);
+ok('记录页可编辑 / 删除导入的记录',
+  recHtml.indexOf('editRecord') >= 0 && recHtml.indexOf('askDeleteRecord') >= 0);
+ok('fmtHs 整数不带小数', S.fmtHs(11) === '11' && S.fmtHs(8) === '8');
+ok('fmtHs 迟到场景保留两位', S.fmtHs(7.58) === '7.58');
+ok('hrPunchBrief 只取首末两次卡',
+  S.hrPunchBrief({ card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' }) === '08:20~17:20');
+ok('hrPunchBrief 单条卡只显示一个', S.hrPunchBrief({ card1: '2026-08-03 08:20' }) === '08:20');
 
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('月份对不上，已隐藏金额差额') >= 0 && script.indexOf('无法对照') >= 0);
