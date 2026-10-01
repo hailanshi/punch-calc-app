@@ -264,10 +264,6 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
           <div class="hint" id="hoursHint" style="margin-top:8px;"></div>
         </div>
       </div>
-      <div class="card pad">
-        <button type="button" class="btn main block" onclick="window.navTo('hr')">📊 HR工资条对照 / 导入打卡</button>
-        <div class="hint" id="hrHomeHint" style="margin-top:8px;">读取公司 EHR 的工资条与打卡数据：工资条和本机计算对照，打卡数据可导入本机记录。</div>
-      </div>
       <div class="card pad" id="quickInfo" style="display:none;">
         <div style="font-size:13px; color:var(--ink2);" id="quickInfoText"></div>
       </div>
@@ -538,42 +534,67 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     </div>
   </section>
 
-  <!-- ==================== HR 数据对照（网页考勤 / 工资条） ==================== -->
+  <!-- ==================== 公司（EHR 登录 / 工资条对照 / 打卡导入） ==================== -->
   <section id="page-hr" class="page">
     <header class="topbar">
-      <button type="button" class="btnText" onclick="window.hrBack()">‹ 首页</button>
-      <div class="title">HR数据对照</div>
+      <button type="button" class="btnText" onclick="window.hrLogout()">退出</button>
+      <div class="title">公司</div>
       <span style="width:52px;"></span>
     </header>
     <div class="scroll">
-      <div class="card pad">
-        <div class="monthBar">
-          <button type="button" class="mIcon" onclick="window.hrShiftMonth(-1)">‹</button>
-          <div class="ym" id="hrMonthLabel">----</div>
-          <button type="button" class="mIcon" onclick="window.hrShiftMonth(1)">›</button>
+
+      <!-- 登录卡：不预置账号密码，必须自己输；可勾选保存到本机 -->
+      <div class="card pad" id="hrLoginCard">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px;">登录公司系统</div>
+        <div class="hint" style="margin-bottom:10px;">
+          读取 hr.voopootech.net 的工资条与打卡数据。账号只保存在本机，不会上传。
         </div>
-        <div class="hint" id="hrStatus">尚未读取。点下方按钮登录公司 HR 系统取数。</div>
-        <div style="display:flex;gap:8px;margin-top:10px;">
-          <button type="button" class="btn main block" style="flex:1;" id="hrFetchBtn" onclick="window.hrFetch()">读取HR数据</button>
-          <button type="button" class="btnText" onclick="window.hrClearCache()">清除缓存</button>
+        <div class="field">
+          <label>账号</label>
+          <input type="text" id="hrUser" autocomplete="off" placeholder="请输入工号">
         </div>
+        <div class="field">
+          <label>密码</label>
+          <input type="password" id="hrPass" autocomplete="off" placeholder="请输入密码">
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:12px 2px;">
+          <input type="checkbox" id="hrRemember" style="width:17px;height:17px;">
+          <span>保存登录（下次自动填好，不用再输）</span>
+        </label>
+        <button type="button" class="btn main block" id="hrLoginBtn" onclick="window.hrLogin()">登录</button>
+        <div class="hint" id="hrLoginHint" style="margin-top:10px;"></div>
       </div>
 
-      <div class="card collapsed" id="hrPayCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页工资条<span class="chev">▶</span></button>
-        <div class="cardBody">
-          <div class="dl" id="hrPayRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
-          <div class="hint" id="hrPayHint" style="margin-top:8px;"></div>
+      <!-- 数据卡：登录后才显示 -->
+      <div id="hrDataWrap" style="display:none;">
+        <div class="card pad">
+          <div class="monthBar">
+            <button type="button" class="mIcon" onclick="window.hrShiftMonth(-1)">‹</button>
+            <div class="ym" id="hrMonthLabel">----</div>
+            <button type="button" class="mIcon" onclick="window.hrShiftMonth(1)">›</button>
+          </div>
+          <div class="hint" id="hrStatus">点下方按钮读取公司数据。</div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button type="button" class="btn main block" style="flex:1;" id="hrFetchBtn" onclick="window.hrFetch()">读取HR数据</button>
+            <button type="button" class="btnText" onclick="window.hrClearCache()">清除缓存</button>
+          </div>
         </div>
-      </div>
 
-      <div class="card collapsed" id="hrCmpCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">工资条对照<span class="chev">▶</span></button>
-        <div class="cardBody">
-          <div class="dl" id="hrCmpRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
-          <div class="hint" id="hrCmpHint" style="margin-top:8px;"></div>
+        <div class="card collapsed" id="hrPayCard">
+          <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页工资条<span class="chev">▶</span></button>
+          <div class="cardBody">
+            <div class="dl" id="hrPayRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
+            <div class="hint" id="hrPayHint" style="margin-top:8px;"></div>
+          </div>
         </div>
-      </div>
+
+        <div class="card collapsed" id="hrCmpCard">
+          <button type="button" class="cardHead" onclick="window.toggleCard(this)">工资条对照<span class="chev">▶</span></button>
+          <div class="cardBody">
+            <div class="dl" id="hrCmpRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
+            <div class="hint" id="hrCmpHint" style="margin-top:8px;"></div>
+          </div>
+        </div>
 
       <div class="card collapsed" id="hrDayCard">
         <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页打卡 → 导入本机<span class="chev">▶</span></button>
@@ -588,15 +609,16 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         </div>
       </div>
 
-      <div class="card pad" id="hrAcctCard">
-        <div style="font-size:13px;color:var(--ink2);">
-          <b>数据来源</b>：公司 EHR（hr.voopootech.net）。工资条 = 个人工资查询，打卡 = 原始打卡记录。<br>
-          只做<b>读取</b>，不会改动服务器任何数据。取到的数据缓存在本机，供离线对照。<br>
-          <b>月份范围不同（重要）</b>：<b>工资条可查任意月份</b>（本账号 2026-07 起有数据，当月未结算会提示）；
-          <b>考勤 / 打卡只有本月和上月</b>，查更早的月份会被服务端回落到上月，所以那几个月没有打卡可导入。
+        <div class="card pad" id="hrAcctCard">
+          <div style="font-size:13px;color:var(--ink2);">
+            <b>数据来源</b>：公司 EHR（hr.voopootech.net）。工资条 = 个人工资查询，打卡 = 原始打卡记录。<br>
+            只做<b>读取</b>，不会改动服务器任何数据。取到的数据缓存在本机，供离线对照。<br>
+            <b>月份范围不同（重要）</b>：<b>工资条可查任意月份</b>（当月未结算会提示）；
+            <b>考勤 / 打卡只有本月和上月</b>，查更早的月份会被服务端回落到上月，所以那几个月没有打卡可导入。
+          </div>
+          <div class="hint" id="hrAccount" style="margin-top:8px;"></div>
         </div>
-        <div class="hint" id="hrAccount" style="margin-top:8px;"></div>
-      </div>
+      </div><!-- /hrDataWrap -->
     </div>
   </section>
 
@@ -663,6 +685,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     <button type="button" class="navItem" data-p="punch" onclick="window.navTo('punch')"><span class="ic">⏰</span>打卡</button>
     <button type="button" class="navItem" data-p="home" onclick="window.navTo('home')"><span class="ic">🏠</span>首页</button>
     <button type="button" class="navItem" data-p="records" onclick="window.navTo('records')"><span class="ic">📒</span>记录</button>
+    <button type="button" class="navItem" data-p="hr" onclick="window.navTo('hr')"><span class="ic">🏢</span>公司</button>
     <button type="button" class="navItem" data-p="settings" onclick="window.navTo('settings')"><span class="ic">⚙️</span>设置</button>
   </nav>
 
@@ -1118,7 +1141,7 @@ function showPage(name){
     var el = $('page-' + pages[i]);
     if (el) el.className = 'page' + (pages[i]===name ? ' on' : '');
   }
-  var navPages = ['home','punch','records','settings'];
+  var navPages = ['home','punch','records','hr','settings'];
   var nav = $('bottomNav');
   if (nav) nav.style.display = (navPages.indexOf(name) >= 0) ? 'flex' : 'none';
   _curPage = name;
@@ -1135,7 +1158,7 @@ function showPage(name){
   syncNav();
 }
 function syncNav(){
-  var navPages = ['home','punch','records','settings'];
+  var navPages = ['home','punch','records','hr','settings'];
   var items = document.querySelectorAll('#bottomNav .navItem');
   for (var i=0;i<items.length;i++){
     var on = items[i].getAttribute('data-p') === _curPage;
@@ -1435,25 +1458,6 @@ function refreshHome(){
       qi.style.display = 'block';
       $('quickInfoText').innerHTML = '📌 本月还没有记录。点下方「打卡」手动录入，或在打卡页用<b>「补卡到今天 / 本月全部补卡」</b>一键补齐工作日。';
     } else qi.style.display = 'none';
-    /* HR 对照入口的状态提示：显示 HR 页当前查看的那个月是否已读过网页数据 */
-    var hh2 = $('hrHomeHint');
-    if (hh2){
-      hrInitYM();
-      var hc = hrCacheGet();
-      var hd = hc[_hrYM];
-      var hmo = hrMonthOffset(_hrYM);
-      if (hd){
-        var hn = (hd.kq && hd.kq.rows) ? hd.kq.rows.length : 0;
-        hh2.innerHTML = ymLabel(_hrYM) + ' 已读取：考勤 ' + hn + ' 天'
-          + (hd.gz ? '，工资条已取到' : '，无工资条')
-          + '（' + esc(String(hd.at || '')) + '）';
-      } else if (hmo < -1){
-        hh2.innerHTML = ymLabel(_hrYM) + ' 早于服务器保留范围（只留本月/上月考勤），请到 HR 页切到上月。';
-      } else {
-        hh2.textContent = '读取公司 EHR 的工资条与打卡数据：工资条和本机计算对照，打卡数据可导入本机记录。'
-          + ymLabel(_hrYM) + ' 尚未读取。';
-      }
-    }
     $('recCountTop').textContent = getRecs().length;
   }catch(e){
     toast('首页刷新失败：' + (e && e.message ? e.message : e), 'bad');
@@ -2641,9 +2645,110 @@ window.addEventListener('error', function(e){
  * month 是「相对当前月的偏移」：0=本月，-1=上月。更早的月份服务器会回落到上月。
  * ===================================================================*/
 var HR_ORIGIN = 'https://hr.voopootech.net';
-var HR_ACCT   = 'T00001';
-var HR_PWD    = 'testpw';
 var LS_HRCACHE = 'punchSalaryHrCache_v1';
+var LS_HRACCT  = 'punchSalaryHrAcct_v1';   /* 账号密码只存本机，由用户勾选「保存登录」决定是否保留 */
+/* 运行期凭据：由登录页输入或从本机存储读入，源码里不预置任何账号 */
+var _hrAcct = '';
+var _hrPwd  = '';
+var _hrLoggedIn = false;                   /* 本次会话是否已登录过公司系统 */
+var _hrSavedChecked = false;               /* 读一次「保存登录」勾选状态，避免反复弹确认 */
+
+/* ---------- 账号存储 ----------
+ * 已保存的账号只做「预填」，不自动登录 —— 用户明确要求不要默认登录好，
+ * 每次都要自己点一下「登录」。但填好的值允许直接点，不必重敲。 */
+function hrLoadAcct(){
+  try{
+    var o = storeGet(LS_HRACCT, null);
+    var user = $('hrUser'), pass = $('hrPass'), rem = $('hrRemember');
+    if (o && typeof o === 'object' && o.u){
+      if (user) user.value = o.u;
+      if (pass) pass.value = o.p || '';
+      if (rem) rem.checked = true;
+      _hrSavedChecked = true;
+      /* 预填即可用：登录时若输入框内容没变，直接放行 */
+      _hrAcct = o.u;
+      _hrPwd  = o.p || '';
+      var h = $('hrLoginHint');
+      if (h) h.innerHTML = '已保存登录：<b>' + esc(o.u) + '</b>，点「登录」即可（不想保留就取消勾选「保存登录」）。';
+    } else if (rem){
+      rem.checked = false;
+    }
+  }catch(e){}
+}
+/* 只清除本机保存的账号，不动输入框里用户正在敲的内容
+ * （hrLogin 会在设好运行期凭据之后调用它，若把输入框也清掉，
+ *   刚输入的账号就会被抹掉，接着 hrFetch 直接判定未登录而退出） */
+function hrClearAcct(){
+  try{ window.localStorage.removeItem(LS_HRACCT); }catch(e){}
+  _hrSavedChecked = false;
+  var rem = $('hrRemember');
+  if (rem) rem.checked = false;
+}
+/* 登录页复位：清空输入框（退出登录时用） */
+function hrResetLoginFields(){
+  var user = $('hrUser'), pass = $('hrPass');
+  if (user) user.value = '';
+  if (pass) pass.value = '';
+}
+/* 登录卡 / 数据卡切换 */
+function hrShowLogin(){
+  var a = $('hrLoginCard'), b = $('hrDataWrap');
+  if (a) a.style.display = '';
+  if (b) b.style.display = 'none';
+}
+function hrShowData(){
+  var a = $('hrLoginCard'), b = $('hrDataWrap');
+  if (a) a.style.display = 'none';
+  if (b) b.style.display = '';
+}
+/* 「登录」：校验输入 → 按勾选决定是否保存 → 进入数据页 */
+function hrLogin(){
+  var user = ($('hrUser') && $('hrUser').value || '').replace(/^\s+|\s+$/g, '');
+  var pass = ($('hrPass') && $('hrPass').value) || '';
+  var rem  = !!($('hrRemember') && $('hrRemember').checked);
+  var h = $('hrLoginHint');
+  if (!user){ if (h) h.textContent = '请输入账号'; return; }
+  if (!pass){ if (h) h.textContent = '请输入密码'; return; }
+  _hrAcct = user;
+  _hrPwd  = pass;
+  if (rem){
+    storeSet(LS_HRACCT, { u: user, p: pass });
+    _hrSavedChecked = true;
+    if (h) h.textContent = '已保存到本机，下次不用再输。';
+  } else {
+    hrClearAcct();
+    if (h) h.textContent = '未保存（下次需要重新输入）。';
+  }
+  /* 先置登录态再切页：hrRender 见到未登录会把页面切回登录卡，
+   * 之前漏了这一步，导致登录后界面又弹回登录页。 */
+  _hrLoggedIn = true;
+  hrShowData();
+  hrRender();
+  hrFetch();
+}
+/* 退出：运行期凭据一律清空；若本机保存过账号，只把输入框预填回去（不自动登录） */
+function hrLogout(){
+  _hrLoggedIn = false;
+  _hrAcct = ''; _hrPwd = '';       /* 运行期凭据必须清掉 */
+  hrShowLogin();
+  hrResetLoginFields();
+  var h = $('hrLoginHint');
+  var rec = storeGet(LS_HRACCT, null);
+  if (rec){
+    var user = $('hrUser'), pass = $('hrPass'), rem = $('hrRemember');
+    if (user) user.value = rec.u || '';
+    if (pass) pass.value = rec.p || '';
+    if (rem) rem.checked = true;
+    _hrSavedChecked = true;
+    if (h) h.innerHTML = '已退出登录。账号已保留：<b>' + esc(rec.u) + '</b>，点「登录」即可再进。';
+    toast('已退出登录（账号已保留）');
+  } else {
+    hrClearAcct();
+    if (h) h.textContent = '已退出登录。';
+    toast('已退出公司系统');
+  }
+  /* 注意：这里只预填输入框，不写回 _hrAcct —— 要再登录必须重新点「登录」 */
+}
 
 /* 登录密码的「加密」：站点 CEComm.js 里 Set_Secret 的等价实现
  * 主体：每字符 → (charCode + 100 + (i+1)*2) 的十进制串直接相连（不补零）
@@ -2715,6 +2820,14 @@ function recHrImport(){
     toast(ymLabel(_hrYM) + '：已读取过（接口返回 ' + n + ' 天），勾选后点「导入选中日期到打卡记录」');
     return;
   }
+  /* 停在缓存里没数据的月份，就要联网取 —— 必须先登录 */
+  if (!_hrLoggedIn){
+    hrRender();               /* 会让公司页显示登录卡 */
+    var h0 = $('hrLoginHint');
+    if (h0) h0.textContent = '先登录公司系统，才能读取打卡数据导入';
+    toast('请先在「公司」页登录');
+    return;
+  }
   if (hrMonthOffset(_hrYM) < -1){
     toast(ymLabel(_hrYM) + ' 早于服务器保留范围，已切到上月');
     var nd = new Date(); nd.setDate(1); nd.setMonth(nd.getMonth() - 1);
@@ -2744,10 +2857,13 @@ function hrH(v){ return (Math.round(hrNum(v)*100)/100).toFixed(2); }
 function hrM(v){ return fmtMoney(hrNum(v)); }
 function hrRender(){
   hrInitYM();
+  /* 未登录就先只显示登录卡 */
+  if (!_hrLoggedIn){ hrShowLogin(); return; }
+  hrShowData();
   var lbl = $('hrMonthLabel'); if (lbl) lbl.textContent = ymLabel(_hrYM);
   var acct = $('hrAccount');
   if (acct){
-    acct.innerHTML = '登录账号：<b>' + esc(HR_ACCT) + '</b>　'
+    acct.innerHTML = '当前账号：<b>' + esc(_hrAcct) + '</b>　'
       + (hrNativeOn() ? '<span style="color:#3d9a63;">原生通道可用</span>'
                       : '<span style="color:var(--danger);">原生通道不可用（浏览器里打开会被跨域拦截，请在 App 内使用）</span>');
   }
@@ -3234,6 +3350,14 @@ function hrBusy(on, msg){
 }
 function hrFetch(){
   hrInitYM();
+  /* 必须先登录：不再使用源码里预置的账号 */
+  if (!_hrAcct || !_hrPwd){
+    hrShowLogin();
+    var h0 = $('hrLoginHint');
+    if (h0) h0.textContent = '请先输入账号和密码登录';
+    toast('请先登录公司系统');
+    return;
+  }
   var off = hrMonthOffset(_hrYM);
   if (off > 0){ toast('不能读取未来月份'); return; }
   /* 不再因为「考勤越界」就把月份强推到上月 —— 工资条任意月份都能查，
@@ -3246,8 +3370,8 @@ function hrFetch(){
   hrPost(HR_ORIGIN + '/LoginController.ashx?action=getLangList', '', 15000, function(ok0){
     if (!ok0){ hrBusy(false, '登录前置请求失败，请检查网络'); toast('HR 不可达'); return; }
     var body = hrForm({
-      user_id: HR_ACCT,
-      password: hrSecret(HR_PWD),
+      user_id: _hrAcct,
+      password: hrSecret(_hrPwd),
       lang_code: '',
       is_mobile: 'Y',
       login_page: 'Login_Mobile.html',
@@ -3294,7 +3418,7 @@ function hrFetch(){
           }
         }
         hrCacheSet(cache);
-        try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:ym, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
+        _hrLoggedIn = true;
         hrBusy(false, '');
         /* 从记录页点「从HR导入打卡」进来的：若本月没有可导入的打卡
          * （当月常常只有 1 天、甚至一条卡都没打），自动再取上月一次，
@@ -3366,6 +3490,8 @@ function boot(){
     refreshHome();
     refreshRecords();
     loadBanner();
+    hrLoadAcct();       /* 把已保存的公司账号预填到登录框（不自动登录） */
+    hrShowLogin();
   }catch(e){}
 }
 boot();
@@ -3379,8 +3505,10 @@ window.shiftMonth = shiftMonth;
 window.recShiftMonth = recShiftMonth;
 window.toggleCard = toggleCard;
 window.toggleAcc = toggleAcc;
-/* HR 数据对照 */
+/* HR / 公司 */
 window.hrBack = hrBack;
+window.hrLogin = hrLogin;
+window.hrLogout = hrLogout;
 window.hrFetch = hrFetch;
 window.hrShiftMonth = hrShiftMonth;
 window.hrClearCache = hrClearCache;

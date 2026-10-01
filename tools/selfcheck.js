@@ -455,12 +455,23 @@ S.storeSet('punchSalaryHrCache_v1', {
   }
 });
 ok('HR 缓存可写可读', !!S.hrCacheGet()['2026-08']);
+/* 数据卡只在登录后显示：先验证未登录时不渲染数据，再模拟登录 */
+S._hrLoggedIn = false;
+S._hrYM = '2026-08';
+stub('hrPayRows').innerHTML = 'SENTINEL';
+S.hrRender();
+ok('未登录时不渲染数据卡', stub('hrPayRows').innerHTML === 'SENTINEL', stub('hrPayRows').innerHTML);
+ok('未登录时显示登录卡', stub('hrLoginCard').style.display !== 'none', stub('hrLoginCard').style.display);
+/* 模拟已登录（等价于用户完成登录） */
+S._hrAcct = 'T00001'; S._hrPwd = 'testpw'; S._hrLoggedIn = true;
 let hrErr = '';
 try {
   S._hrYM = '2026-08';
   S.hrRender();
 } catch (e) { hrErr = e.message; }
 ok('hrRender 不抛异常', hrErr === '', hrErr);
+ok('登录后显示数据卡', stub('hrDataWrap').style.display !== 'none', stub('hrDataWrap').style.display);
+ok('登录后隐藏登录卡', stub('hrLoginCard').style.display === 'none', stub('hrLoginCard').style.display);
 ok('工资条卡片渲染出实发工资', stub('hrPayRows').innerHTML.indexOf('实发工资') >= 0);
 ok('工资条金额带 ¥ 符号', stub('hrPayRows').innerHTML.indexOf('¥4935.01') >= 0);
 /* 对照：只比工资条，不再比考勤 */
@@ -800,6 +811,65 @@ ok('导入的数据参与工资计算（正班 = 8+8+8）', impCalc2.sum.normal 
 ok('导入的数据带来加班工时（3+3）', impCalc2.sum.wd === 6, impCalc2.sum.wd);
 ok('导入后该月记录数正确', impCalc2.recCount === 3, impCalc2.recCount);
 
+/* ---------- 15. 公司登录（不预置账号 / 保存登录 / 退出） ---------- */
+section('15. 公司登录');
+ok('源码里不再预置账号密码', typeof S.HR_ACCT === 'undefined' && typeof S.HR_PWD === 'undefined');
+ok('源码里没有硬编码账号赋值', !/HR_ACCT\s*=\s*['"]/.test(script) && !/HR_PWD\s*=\s*['"]/.test(script));
+ok('登录用的是可编辑输入框而非固定值',
+  /user_id:\s*_hrAcct/.test(script) && /hrSecret\(_hrPwd\)/.test(script));
+ok('账号存储键已定义', S.LS_HRACCT === 'punchSalaryHrAcct_v1');
+/* 未登录时 hrFetch 应被拦住，不发请求 */
+S._hrAcct = ''; S._hrPwd = ''; S._hrLoggedIn = false;
+let fetchBlocked = false;
+const origPost = S.hrPost;
+S.hrPost = () => { fetchBlocked = true; };
+S.hrFetch();
+S.hrPost = origPost;
+ok('未登录时 hrFetch 不发请求', fetchBlocked === false);
+ok('未登录时提示去登录', stub('hrLoginHint').textContent.indexOf('请先输入账号') >= 0, stub('hrLoginHint').textContent);
+/* 登录：输入为空要拦住 */
+S.hrClearAcct();
+stub('hrUser').value = ''; stub('hrPass').value = '';
+S.hrLogin();
+ok('账号为空时拒绝登录', S._hrLoggedIn === false, S._hrLoggedIn);
+ok('账号为空时给出提示', stub('hrLoginHint').textContent.indexOf('请输入账号') >= 0, stub('hrLoginHint').textContent);
+stub('hrUser').value = 'u1'; stub('hrPass').value = '';
+S.hrLogin();
+ok('密码为空时拒绝登录', S._hrLoggedIn === false && stub('hrLoginHint').textContent.indexOf('请输入密码') >= 0);
+/* 正常登录：不勾保存 -> 不留密码 */
+stub('hrUser').value = 'testuser'; stub('hrPass').value = 'testpass'; stub('hrRemember').checked = false;
+S.hrLogin();
+ok('登录成功后进入数据页', S._hrLoggedIn === true && stub('hrDataWrap').style.display !== 'none', S._hrLoggedIn);
+ok('未勾选保存时不落盘账号', !S.storeGet(S.LS_HRACCT, null), JSON.stringify(S.storeGet(S.LS_HRACCT, null)));
+/* 勾选保存 -> 落盘，且下次预填、但「不自动登录」 */
+stub('hrUser').value = 'testuser'; stub('hrPass').value = 'testpass'; stub('hrRemember').checked = true;
+S.hrLogin();
+const loginSaved = S.storeGet(S.LS_HRACCT, null);
+ok('勾选保存后账号落盘', loginSaved && loginSaved.u === 'testuser' && loginSaved.p === 'testpass', JSON.stringify(loginSaved));
+S._hrLoggedIn = false; S._hrAcct = ''; S._hrPwd = '';
+stub('hrUser').value = ''; stub('hrPass').value = ''; stub('hrRemember').checked = false;
+S.hrLoadAcct();
+ok('重新打开时预填账号', stub('hrUser').value === 'testuser', stub('hrUser').value);
+ok('重新打开时预填密码', stub('hrPass').value === 'testpass', stub('hrPass').value);
+ok('重新打开时勾选保存', stub('hrRemember').checked === true);
+ok('预填不等于自动登录', S._hrLoggedIn === false, S._hrLoggedIn);
+ok('预填后提示可点登录', stub('hrLoginHint').innerHTML.indexOf('已保存登录') >= 0);
+/* 退出：回到登录页 */
+S._hrLoggedIn = true; S._hrAcct = 'testuser'; S._hrPwd = 'testpass';
+S.hrLogout();
+ok('退出后回到登录页', S._hrLoggedIn === false && stub('hrLoginCard').style.display !== 'none');
+ok('退出后清空运行期凭据', S._hrAcct === '' && S._hrPwd === '', S._hrAcct + '/' + S._hrPwd);
+ok('退出不影响已保存的账号', !!S.storeGet(S.LS_HRACCT, null));
+/* hrLogin / hrLogout 已挂 window */
+ok('hrLogin / hrLogout 已挂 window',
+  script.indexOf('window.hrLogin = hrLogin') >= 0 && script.indexOf('window.hrLogout = hrLogout') >= 0);
+/* 底部导航：公司入口 + 首屏入口已下线 */
+ok('底部导航有「公司」入口', /navItem" data-p="hr"/.test(html) && html.indexOf('>公司</button>') >= 0);
+ok('hr 已加入 navPages（切过去底部栏不消失）',
+  /var navPages = \[[^\]]*'hr'[^\]]*\]/.test(script));
+ok('首页的 HR 按钮已移除', html.indexOf('HR工资条对照 / 导入打卡') < 0);
+ok('HR 页标题改为「公司」', /<div class="title">公司<\/div>/.test(html));
+
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('月份对不上，已隐藏金额差额') >= 0 && script.indexOf('无法对照') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));
@@ -807,8 +877,9 @@ ok('HR 内联 handler 都已挂 window',
   ['hrBack', 'hrFetch', 'hrShiftMonth', 'hrClearCache', 'hrSelAll', 'hrImport']
     .every(f => script.indexOf('window.' + f + ' = ' + f) >= 0));
 ok('HR 页 DOM id 齐备',
-  ['page-hr', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrPayRows', 'hrPayHint',
-   'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount', 'hrHomeHint']
+  ['page-hr', 'hrLoginCard', 'hrUser', 'hrPass', 'hrRemember', 'hrLoginBtn', 'hrLoginHint',
+   'hrDataWrap', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrPayRows', 'hrPayHint',
+   'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount']
     .every(id => html.indexOf('id="' + id + '"') >= 0));
 
 console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败');
