@@ -3063,8 +3063,8 @@ function hrRenderDays(d){
         : '<br>本月所有工作日都有记录，不会有缺勤。';
       imp.innerHTML = '按<b>公司班次口径</b>折算：正班 = 落在 ' + HR_SHIFT_TEXT + ' 内的时长（满勤 8h），'
         + '加班 = 18:00 之后（正常 3h），统计取整数；迟到 / 早退才按实际扣减。<br>'
-        + '勾选要导入的日期，App 会按当天日期判定工作日 / 周末 / 法定节假日并分档。'
-        + '已有记录的日期需确认才会覆盖。'
+        + '<b>导入会先清空所选日期的原有记录</b>（手动打卡 / 自动补卡 / 上次导入的），'
+        + '再整片写入网页打卡，避免新旧混在一起。'
         + '<b>只有一条卡（漏打）不会丢弃整天</b>，会按 21:00 下班补齐并标红提示，可自行取消勾选。'
         + (canCount ? '<br>本次可导入 <b>' + canCount + '</b> 天（接口返回 ' + crows.length + ' 天，其中空卡的不算）。' : '')
         + absNote;
@@ -3148,31 +3148,26 @@ function hrImport(){
   for (var j=0;j<cs.length;j++){ if (cs[j].checked) pick.push(cs[j].getAttribute('data-date')); }
   if (!pick.length){ toast('没有勾选任何日期'); return; }
 
-  var recs = getRecs();
-  var existMap = {};
-  for (var k=0;k<recs.length;k++){ existMap[recs[k].date] = 1; }
-  var dup = 0;
-  for (var m=0;m<pick.length;m++){ if (existMap[pick[m]]) dup++; }
-  var overwrite = true;
-  if (dup > 0){
-    overwrite = window.confirm('选中 ' + pick.length + ' 天，其中 ' + dup + ' 天已有记录。\n\n'
-      + '「确定」= 用网页打卡覆盖这些日期\n「取消」= 保留已有记录，只导入没有记录的日期');
-  }
-
-  /* 纯数据部分交给 hrBuildImport，便于单测；这里只负责剔重与写库 */
+  /* 按用户要求：导入前先清空「导入区域」的原有记录（手动打卡 / 自动补卡 / 上一次导入的），
+   * 再整片写入网页打卡 —— 每次导入都是干净的覆盖，不会新旧混在一起。
+   * 这里用「选中日期」而不是「整月」来界定范围：如果用户只勾了几天，
+   * 却把整月清空，其余日期会全变成缺勤，反而更糟。 */
   var built = hrBuildImport(d, pick);
-  var added = 0, replaced = 0, skipped = built.skipped;
-  for (var n=0;n<built.recs.length;n++){
-    var rec = built.recs[n];
-    if (existMap[rec.date]){
-      if (!overwrite){ skipped++; continue; }
-      for (var q=recs.length-1;q>=0;q--){ if (recs[q].date === rec.date) recs.splice(q,1); }
-      replaced++;
-    }
-    recs.push(rec);
-    added++;
+  if (!built.recs.length){
+    toast('没有可导入的记录（选中日期都没有打卡时长）');
+    return;
   }
-  if (!added){ toast('没有可导入的记录（选中日期都没有打卡时长）'); return; }
+  var newDates = {};
+  for (var n=0;n<built.recs.length;n++){ newDates[built.recs[n].date] = 1; }
+  var recs = [], removed = 0;
+  var old = getRecs();
+  for (var k=0;k<old.length;k++){
+    if (newDates[old[k].date]){ removed++; continue; }   /* 这些日期整片重写 */
+    recs.push(old[k]);
+  }
+  var added = built.recs.length;
+  for (var w=0;w<built.recs.length;w++){ recs.push(built.recs[w]); }
+
   /* 导入的日期落在哪个月，就把首页 / 记录页 / HR 页一起切到那个月，
    * 否则用户导入完还要自己找月份。考勤接口只有本月/上月两档，
    * 服务端回落到上个月时，这里能自动跟着走。 */
@@ -3181,15 +3176,15 @@ function hrImport(){
   if (rng.from){
     if (rng.from !== rng.to) jumped = '（跨月 ' + rng.from + ' ~ ' + rng.to + '）';
     hrGotoYM(rng.to);          /* 以最后一个月为落地月，保证刚导入的能看见 */
-    cache = hrCacheGet();
   }
   setRecs(recs);
   resplitRecords();
   refreshHome();
   refreshRecords();
-  var ld = cache[_hrYM] || d;
-  hrRenderCmp(ld);
-  toast('导入完成：新增 ' + added + '，覆盖 ' + replaced + '，跳过 ' + skipped
+  var cache2 = hrCacheGet();
+  hrRenderCmp(cache2[_hrYM] || d);
+  toast('导入完成：清空旧记录 ' + removed + ' 条 → 写入 ' + added + ' 条'
+        + (built.skipped ? '，跳过 ' + built.skipped + ' 天' : '')
         + '；已切到 ' + ymLabel(_hrYM) + jumped);
 }
 

@@ -750,6 +750,56 @@ S.recHrImport();
 ok('当前月无缓存时回退到最近有数据的月份', S._hrYM === '2026-07', S._hrYM);
 ok('回退后不再触发网络取数', S._hrWantImport === false, S._hrWantImport);
 
+/* ---------- 14. 导入前先清空该月原有记录 ---------- */
+section('14. 导入先清空旧记录（整片覆盖）');
+const impCard = (d) => ({ kq_date: d, card1: d + ' 08:20', card2: d + ' 11:50', card3: d + ' 12:50', card4: d + ' 17:20', card5: d + ' 17:55', card6: d + ' 21:00' });
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-08': {
+    at: '2026-10-02 00:00', ym: '2026-08',
+    kq: { rows: [{ id_date: '2026-08-03' }, { id_date: '2026-08-04' }] },
+    card: { rows: [impCard('2026-08-03'), impCard('2026-08-04')] },
+    gz: { gz_result: {} }, gzMsg: ''
+  }
+});
+/* 预置：月初有手动打卡、还有一条不在导入范围内的日期 */
+S.setRecs([
+  { date: '2026-08-03', type: 'work', hours: 7, n: 7, d: 0, w: 0, h: 0, note: '手动录的旧数据' },
+  { date: '2026-08-04', type: 'absent', hours: 0, n: 0, d: 0, w: 0, h: 0, note: '' },
+  { date: '2026-08-10', type: 'work', hours: 8, n: 8, d: 0, w: 0, h: 0, note: '不在导入范围' }
+]);
+S._hrYM = '2026-08'; S._curYM = '2026-08';
+const dayEl = stub('hrDayRows');
+dayEl.querySelectorAll = () => [
+  { checked: true, getAttribute: () => '2026-08-03' },
+  { checked: true, getAttribute: () => '2026-08-04' }
+];
+S.hrImport();
+const afterClear = S.getRecs();
+const byDate = {};
+for (const r of afterClear) byDate[r.date] = r;
+ok('导入后旧的手动记录被清掉（不再 7h）',
+  byDate['2026-08-03'] && byDate['2026-08-03'].hours === 11, byDate['2026-08-03'] && byDate['2026-08-03'].hours);
+ok('导入后旧的缺勤记录被清掉（变成上班 11h）',
+  byDate['2026-08-04'] && byDate['2026-08-04'].type === 'work' && byDate['2026-08-04'].hours === 11,
+  byDate['2026-08-04'] && byDate['2026-08-04'].type);
+ok('不在导入范围的记录保留',
+  byDate['2026-08-10'] && byDate['2026-08-10'].note === '不在导入范围', byDate['2026-08-10'] && byDate['2026-08-10'].note);
+ok('导入的日期不重复（没有新旧两条）',
+  afterClear.filter((r) => r.date === '2026-08-03').length === 1,
+  afterClear.filter((r) => r.date === '2026-08-03').length);
+ok('总记录数 = 保留 1 条 + 新增 2 条', afterClear.length === 3, afterClear.length);
+ok('重复导入结果稳定（不再有疑问弹窗）', (() => {
+  const before = JSON.stringify(S.getRecs().map((r) => r.date + ':' + r.hours).sort());
+  S.hrImport();
+  const after = JSON.stringify(S.getRecs().map((r) => r.date + ':' + r.hours).sort());
+  return before === after;
+})());
+/* 导入的数据要进工资计算 */
+const impCalc2 = S.calcMonth('2026-08');
+ok('导入的数据参与工资计算（正班 = 8+8+8）', impCalc2.sum.normal === 24, impCalc2.sum.normal);
+ok('导入的数据带来加班工时（3+3）', impCalc2.sum.wd === 6, impCalc2.sum.wd);
+ok('导入后该月记录数正确', impCalc2.recCount === 3, impCalc2.recCount);
+
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('月份对不上，已隐藏金额差额') >= 0 && script.indexOf('无法对照') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));
