@@ -3001,12 +3001,36 @@ function hrRenderDays(d){
   if (imp){
     if (!rows.length && !crows.length){ imp.textContent = '没有取到打卡数据。'; }
     else {
+      /* 预览：这个月哪些日子会因为没有记录而被算成缺勤（会清零全勤奖） */
+      var haveRec = {};
+      var allRecs = getRecs();
+      for (var q=0;q<allRecs.length;q++){ haveRec[allRecs[q].date] = 1; }
+      var absList = [];
+      var pm = ymParts(_hrYM);
+      var pdays = monthDays(pm.y, pm.m);
+      var willBeFilled = {};
+      var canCount = 0;
+      for (var w=0;w<crows.length;w++){ if (hrDayHours(crows[w]) > 0){ willBeFilled[crows[w].kq_date] = 1; canCount++; } }
+      for (var dd=1; dd<=pdays; dd++){
+        var ds = _hrYM + '-' + pad2(dd);
+        if (haveRec[ds] || willBeFilled[ds]) continue;
+        if (classify(ds).type !== 'workday') continue;   /* 休息日不算缺勤 */
+        absList.push(dd);
+      }
+      var S2 = getSet();
+      var absNote = absList.length
+        ? '<br><b style="color:var(--danger);">⚠ ' + esc(_hrYM) + ' 有 ' + absList.length
+          + ' 天没有打卡记录（' + esc(absList.join('、')) + ' 日），导入后这些天算<b>缺勤</b>，'
+          + '会清零全勤奖（' + fmtMoney(S2.full) + '）。</b>'
+          + '若其中有请假 / 调休，请在记录页手动补一条或改成休息。'
+        : '<br>本月所有工作日都有记录，不会有缺勤。';
       imp.innerHTML = '按<b>公司班次口径</b>折算：正班 = 落在 ' + HR_SHIFT_TEXT + ' 内的时长（满勤 8h），'
         + '加班 = 18:00 之后（正常 3h），统计取整数；迟到 / 早退才按实际扣减。<br>'
         + '勾选要导入的日期，App 会按当天日期判定工作日 / 周末 / 法定节假日并分档。'
         + '已有记录的日期需确认才会覆盖。'
         + '<b>只有一条卡（漏打）不会丢弃整天</b>，会按 21:00 下班补齐并标红提示，可自行取消勾选。'
-        + (crows.length ? '<br>可导入 ' + crows.length + ' 天原始打卡。' : '');
+        + (canCount ? '<br>本次可导入 <b>' + canCount + '</b> 天（接口返回 ' + crows.length + ' 天，其中空卡的不算）。' : '')
+        + absNote;
     }
   }
   if (!rows.length){

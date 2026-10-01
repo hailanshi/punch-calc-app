@@ -530,6 +530,27 @@ const impEmpty = {
   kq: { rows: [{ id_date: '2026-10-01' }] }
 };
 ok('无打卡的日期才计入 skipped', S.hrBuildImport(impEmpty, ['2026-10-01']).skipped === 1);
+
+/* 缺勤预览：导入前要能看出哪些工作日没记录、会清零全勤奖 */
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-08': {
+    at: '2026-10-01 22:00', ym: '2026-08',
+    kq: { rows: [{ id_date: '2026-08-03' }, { id_date: '2026-08-04' }] },
+    card: { rows: [
+      { kq_date: '2026-08-03', card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' },
+      { kq_date: '2026-08-04', card1: '' }
+    ] },
+    gz: { gz_result: {} }, gzMsg: ''
+  }
+});
+S.setRecs([]);
+S._hrYM = '2026-08'; S._curYM = '2026-08';
+S.hrRender();
+const impHintTxt = stub('hrImpHint').innerHTML;
+ok('导入提示带缺勤预警', impHintTxt.indexOf('算<b>缺勤</b>') >= 0 || impHintTxt.indexOf('缺勤') >= 0);
+ok('导入提示给出可导入天数（只算有空卡的）',
+  impHintTxt.indexOf('本次可导入 <b>1</b> 天') >= 0, impHintTxt.slice(0, 300));
+ok('导入提示说明全勤奖会清零', impHintTxt.indexOf('全勤奖') >= 0);
 ok('hrDayPunch 识别休息日', S.hrDayPunch(REAL_PUNCH, '2026-09-27').rest === true);
 ok('hrDayPunch 识别工作日（含调休补班 09-20）',
   S.hrDayPunch(REAL_PUNCH, '2026-09-20').rest === false && S.classify('2026-09-20').type === 'workday');
