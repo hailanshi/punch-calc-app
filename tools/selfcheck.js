@@ -716,6 +716,40 @@ ok('hrPunchBrief 只取首末两次卡',
   S.hrPunchBrief({ card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' }) === '08:20~17:20');
 ok('hrPunchBrief 单条卡只显示一个', S.hrPunchBrief({ card1: '2026-08-03 08:20' }) === '08:20');
 
+/* ---------- 13. 记录页「从HR导入打卡」入口 ---------- */
+section('13. 记录页从 HR 导入入口');
+ok('记录页有「从HR导入打卡」按钮', /recHrImport\(\)/.test(html) && html.indexOf('从HR导入打卡') >= 0);
+ok('recHrImport 已挂 window', script.indexOf('window.recHrImport = recHrImport') >= 0);
+ok('openOnlyCard 已定义', typeof S.openOnlyCard === 'function');
+ok('_hrWantImport 标记已定义', typeof S._hrWantImport !== 'undefined');
+/* 记录页当月已有缓存时：跳到 HR 页并展开导入卡，不重复取数 */
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-08': {
+    at: '2026-10-01 23:00', ym: '2026-08',
+    kq: { rows: [] },
+    card: { rows: [{ kq_date: '2026-08-03', card1: '2026-08-03 08:20', card2: '2026-08-03 17:20' }] },
+    gz: { gz_result: {} }, gzMsg: ''
+  }
+});
+S._curYM = '2026-08'; S._hrYM = '2026-08';
+S.navTo('records');
+S.recHrImport();
+ok('点入口后切到 HR 页', S._curPage === 'hr', S._curPage);
+ok('导入卡片被展开', stub('hrDayCard').className.indexOf('open') >= 0, stub('hrDayCard').className);
+ok('已有缓存时不置取数标记', S._hrWantImport === false, S._hrWantImport);
+/* 当月没有缓存、但别的月份有：回退到最近读过的月份，不白跑一次网络 */
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-07': {
+    at: '2026-10-01 23:01', ym: '2026-07',
+    kq: { rows: [] }, card: { rows: [] }, gz: { gz_result: {} }, gzMsg: ''
+  }
+});
+S._curYM = '2026-10'; S._hrYM = '2026-10';
+S.navTo('records');
+S.recHrImport();
+ok('当前月无缓存时回退到最近有数据的月份', S._hrYM === '2026-07', S._hrYM);
+ok('回退后不再触发网络取数', S._hrWantImport === false, S._hrWantImport);
+
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('月份对不上，已隐藏金额差额') >= 0 && script.indexOf('无法对照') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));

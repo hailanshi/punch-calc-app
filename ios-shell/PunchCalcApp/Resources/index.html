@@ -355,6 +355,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
 
       <div class="toolWrap" style="margin:6px 0 2px;">
+        <button type="button" class="chip" onclick="window.recHrImport()">📥 从HR导入打卡</button>
         <button type="button" class="chip" onclick="window.exportRecs('month')">导出本月</button>
         <button type="button" class="chip" onclick="window.exportRecs('all')">导出全部</button>
         <button type="button" class="chip" onclick="window.pickImport('append')">导入·追加</button>
@@ -1484,6 +1485,18 @@ function toggleCard(btn){
   try{
     var card = btn.parentNode;
     card.className = card.className.indexOf('open') >= 0 ? 'card collapsed' : 'card open';
+  }catch(e){}
+}
+/* 只展开指定卡片、收起同页其它卡片（HR 页从记录页跳进来时用） */
+function openOnlyCard(id){
+  try{
+    var el = $(id);
+    if (!el) return;
+    el.className = 'card open';
+    var all = document.querySelectorAll('#page-hr .card');
+    for (var i=0;i<all.length;i++){
+      if (all[i] !== el && all[i].className.indexOf('collapsed') >= 0) all[i].className = 'card collapsed';
+    }
   }catch(e){}
 }
 
@@ -2652,6 +2665,8 @@ function hrCacheSet(c){ storeSet(LS_HRCACHE, c); }
 /* HR 页与首页/记录页共用同一个月，默认就是 _curYM（不另设「上个月」，
  * 否则记录页在 10 月、HR 页在 9 月，导入的记录会落到意料之外的月份）。 */
 var _hrYM = '';
+var _hrWantImport = false;   /* 从记录页跳进来时置真：取数完成后自动展开导入卡 */
+var _hrTriedPrev = false;    /* 当月没有可导入打卡时，只自动回退到上月一次 */
 function hrInitYM(){
   if (_hrYM) return;
   _hrYM = _curYM || ymNow();
@@ -2676,6 +2691,40 @@ function hrShiftMonth(d){
   hrGotoYM(nd.getFullYear() + '-' + pad2(nd.getMonth() + 1));
   hrRender();
 }
+/* 记录页的「从HR导入打卡」入口：跳到 HR 页并直接展开导入卡片。
+ * 若当前月份没有取过数据，就自动取一次（顺带回退到缓存里最近有数据的月份），
+ * 免得用户到了 HR 页还要自己找按钮、自己切月份。 */
+function recHrImport(){
+  hrInitYM();
+  _hrTriedPrev = false;      /* 每次从这个入口进来都允许重新回退一次 */
+  navTo('hr');
+  var cache = hrCacheGet();
+  var d = cache[_hrYM];
+  if (!d){
+    /* 当前月没取过：优先用缓存里最近读过的月份（服务端只给本月/上月） */
+    var ks = Object.keys(cache).sort();
+    if (ks.length){
+      _hrYM = ks[ks.length - 1];
+      d = cache[_hrYM];
+    }
+  }
+  openOnlyCard('hrDayCard');
+  if (d){
+    hrRender();
+    var n = ((d.card && d.card.rows) || []).length;
+    toast(ymLabel(_hrYM) + '：已读取过（接口返回 ' + n + ' 天），勾选后点「导入选中日期到打卡记录」');
+    return;
+  }
+  if (hrMonthOffset(_hrYM) < -1){
+    toast(ymLabel(_hrYM) + ' 早于服务器保留范围，已切到上月');
+    var nd = new Date(); nd.setDate(1); nd.setMonth(nd.getMonth() - 1);
+    hrGotoYM(nd.getFullYear() + '-' + pad2(nd.getMonth() + 1));
+    hrRender();
+  }
+  _hrWantImport = true;   /* 取数完成后 hrRender 会自动展开导入卡 */
+  hrFetch();
+}
+
 function hrBack(){ navTo('home'); }
 function hrClearCache(){
   storeSet(LS_HRCACHE, {});
@@ -2708,6 +2757,8 @@ function hrRender(){
   hrRenderPay(d);
   hrRenderCmp(d);
   hrRenderDays(d);
+  /* 从记录页点「从HR导入打卡」进来时，取数完成自动展开导入卡 */
+  if (_hrWantImport){ _hrWantImport = false; openOnlyCard('hrDayCard'); }
   var st = $('hrStatus');
   if (st) st.textContent = '已读取（' + (d.at || '未知时间') + '）。数据缓存在本机。';
 }
@@ -3250,6 +3301,25 @@ function hrFetch(){
         hrCacheSet(cache);
         try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:ym, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
         hrBusy(false, '');
+        /* 从记录页点「从HR导入打卡」进来的：若本月没有可导入的打卡
+         * （当月常常只有 1 天、甚至一条卡都没打），自动再取上月一次，
+         * 免得用户看到「0 天可导入」还得自己切月份。 */
+        if (_hrWantImport){
+          var hasImp = false;
+          var crowsX = (rec.card && rec.card.rows) || [];
+          for (var ci=0; ci<crowsX.length; ci++){ if (hrDayHours(crowsX[ci]) > 0){ hasImp = true; break; } }
+          if (!hasImp && off === 0 && !_hrTriedPrev){
+            _hrTriedPrev = true;          /* 只回退一次，避免来回请求 */
+            _hrWantImport = true;
+            toast(ymLabel(ym) + ' 没有可导入的打卡，正在取上月…');
+            var nd2 = new Date(); nd2.setDate(1); nd2.setMonth(nd2.getMonth() - 1);
+            hrGotoYM(nd2.getFullYear() + '-' + pad2(nd2.getMonth() + 1));
+            hrRender();
+            hrFetch();
+            return;
+          }
+          _hrWantImport = false;
+        }
         hrRender();
         hrAfterToast(rec, ym);
       };
@@ -3322,6 +3392,7 @@ window.hrClearCache = hrClearCache;
 window.hrSelAll = hrSelAll;
 window.hrImport = hrImport;
 window.hrGotoYM = hrGotoYM;
+window.recHrImport = recHrImport;
 window.pickType = pickType;
 window.setHours = setHours;
 window.punchChanged = punchChanged;
