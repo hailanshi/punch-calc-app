@@ -554,6 +554,59 @@ ok('事假日期在备注里被标注',
   String(S.hrBuildImport(impD2, ['2026-08-03']).recs[0].note).indexOf('事假') >= 0,
   S.hrBuildImport(impD2, ['2026-08-03']).recs[0].note);
 
+/* ---------- 11. 月份对应：网页几月 ↔ 本机几月 ---------- */
+section('11. 网页月份与本机月份对应');
+ok('hrMonthRange 单月', S.hrMonthRange(['2026-08-01', '2026-08-31']).from === '2026-08' &&
+  S.hrMonthRange(['2026-08-01', '2026-08-31']).to === '2026-08');
+ok('hrMonthRange 跨月取最早/最晚', S.hrMonthRange(['2026-08-31', '2026-09-01']).from === '2026-08' &&
+  S.hrMonthRange(['2026-08-31', '2026-09-01']).to === '2026-09');
+ok('hrMonthRange 忽略非法值', S.hrMonthRange(['', null, 'garbage']).from === '');
+ok('hrMonthRange 对空入参安全', S.hrMonthRange(null).to === '');
+/* HR 页与首页/记录页必须同一个月 */
+S._hrYM = ''; S._curYM = '2026-09';
+S.hrInitYM();
+ok('hrInitYM 采用 _curYM（不再自说自话取上月）', S._hrYM === '2026-09', S._hrYM);
+S._hrYM = '2026-09'; S._curYM = '2026-09';
+S.hrShiftMonth(-1);
+ok('HR 页切月带动 _curYM', S._curYM === '2026-08', S._curYM);
+ok('HR 页切月后两处一致', S._hrYM === S._curYM, S._hrYM + ' / ' + S._curYM);
+S._curYM = '2026-09';
+S.shiftMonth(-1);
+ok('首页/记录页切月带动 HR 页', S._hrYM === '2026-08', S._hrYM);
+S.hrGotoYM('2026-07');
+ok('hrGotoYM 同步两边', S._hrYM === '2026-07' && S._curYM === '2026-07');
+
+/* 导入后应自动切到「数据实际所在月份」，而不是停在你碰巧停留的月份 */
+const impMonthD = {
+  card: { rows: [
+    { kq_date: '2026-08-03', card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' },
+    { kq_date: '2026-08-04', card1: '2026-08-04 08:20', card2: '2026-08-04 11:50', card3: '2026-08-04 12:50', card4: '2026-08-04 17:20' }
+  ] },
+  kq: { rows: [{ id_date: '2026-08-03' }, { id_date: '2026-08-04' }] },
+  gz: { gz_result: { item_61: '168.0', item_145: '4935.01' } }, gzMsg: ''
+};
+S.storeSet('punchSalaryHrCache_v1', { '2026-08': impMonthD });
+S.setRecs([]);
+S._hrYM = '2026-10'; S._curYM = '2026-10';     /* 故意停在 10 月，数据其实是 8 月 */
+const hrDayEl = stub('hrDayRows');
+hrDayEl.querySelectorAll = () => [
+  { checked: true, getAttribute: () => '2026-08-03' },
+  { checked: true, getAttribute: () => '2026-08-04' }
+];
+S.hrImport();
+const impRecs = S.getRecs();
+ok('导入写入 2 条记录', impRecs.length === 2, impRecs.length);
+ok('记录日期来自数据本身（8 月）',
+  impRecs.length === 2 && impRecs[0].date.indexOf('2026-08') === 0, impRecs[0] && impRecs[0].date);
+ok('导入后自动切到数据月份 2026-08', S._curYM === '2026-08', S._curYM);
+ok('HR 页也跟着切到 2026-08', S._hrYM === '2026-08', S._hrYM);
+ok('导入的是正班 8h（满勤整点）',
+  impRecs.length === 2 && impRecs[0].hours === 8 && impRecs[0].n === 8, impRecs[0] && impRecs[0].hours + 'h');
+/* 导入的打卡记录必须参与工资计算（用户要求用它来算） */
+const impCalc = S.calcMonth('2026-08');
+ok('导入的打卡记录参与工资计算（正班工时 > 0）', impCalc.sum.normal === 16, impCalc.sum.normal);
+ok('导入后该月记录数正确', impCalc.recCount === 2, impCalc.recCount);
+
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('服务器实际返回的是') >= 0 && script.indexOf('不一致') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));

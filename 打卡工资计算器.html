@@ -1493,6 +1493,10 @@ function shiftMonth(delta){
   var p = ymParts(_curYM);
   var nd = new Date(p.y, p.m - 1 + delta, 1);
   _curYM = nd.getFullYear() + '-' + pad2(nd.getMonth()+1);
+  /* 首页 / 记录页 / HR 页共用同一个月，切一处三处一起走，
+   * 否则「记录页在 10 月、HR 页在 9 月」，导入的记录会落在意料之外的月份。
+   * _hrYM 若尚未初始化，hrInitYM() 会直接采用 _curYM，所以不必在这里补。 */
+  if (typeof _hrYM !== 'undefined' && _hrYM) _hrYM = _curYM;
   refreshHome();
 }
 function recShiftMonth(delta){
@@ -2646,14 +2650,18 @@ function hrForm(o){
 function hrCacheGet(){ var c = storeGet(LS_HRCACHE, null); return (c && typeof c === 'object') ? c : {}; }
 function hrCacheSet(c){ storeSet(LS_HRCACHE, c); }
 
-/* 当前查看的 HR 月份（YYYY-MM）。默认取上月（工资条通常次月才出）。 */
+/* HR 页与首页/记录页共用同一个月，默认就是 _curYM（不另设「上个月」，
+ * 否则记录页在 10 月、HR 页在 9 月，导入的记录会落到意料之外的月份）。 */
 var _hrYM = '';
 function hrInitYM(){
   if (_hrYM) return;
-  var d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  _hrYM = d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  _hrYM = _curYM || ymNow();
+}
+/* 把 HR 页切到某个月，并与首页/记录页保持同步 */
+function hrGotoYM(ym){
+  if (!ym) return;
+  _hrYM = ym;
+  _curYM = ym;
 }
 /* 目标月份 → 接口的 month 偏移（相对当前月） */
 function hrMonthOffset(ym){
@@ -2665,7 +2673,8 @@ function hrShiftMonth(d){
   hrInitYM();
   var p = ymParts(_hrYM);
   var nd = new Date(p.y, p.m - 1 + d, 1);
-  _hrYM = nd.getFullYear() + '-' + pad2(nd.getMonth() + 1);
+  /* 走 hrGotoYM：切 HR 月份时把首页/记录页一起带过去，保持三个月一致 */
+  hrGotoYM(nd.getFullYear() + '-' + pad2(nd.getMonth() + 1));
   hrRender();
 }
 function hrBack(){ navTo('home'); }
@@ -2853,6 +2862,26 @@ function hrRenderCmp(d){
 
   if (hint){
     var tips = [];
+    /* 月份对应关系：网页数据实际是哪个月、工资条是哪个月、本机看的是哪个月 */
+    var arows = (d.kq && d.kq.rows) || [];
+    var acFrom = hrMonthRange(arows.map(function(x){ return x.id_date; }));
+    var gzYM = String(gz.item_2 || '').slice(0, 7);
+    var mline = '本机记录月：<b>' + esc(_hrYM) + '</b>'
+      + '　｜　网页打卡：<b>' + esc(acFrom.from || '—')
+      + (acFrom.to && acFrom.to !== acFrom.from ? ' ~ ' + esc(acFrom.to) : '') + '</b>'
+      + (gzYM ? '　｜　工资条：<b>' + esc(gzYM) + '</b>' : '');
+    if (acFrom.from && acFrom.from !== _hrYM){
+      mline += '<br><b style="color:var(--danger);">⚠ 网页数据是 ' + esc(acFrom.from)
+        + '，不是你要看的 ' + esc(_hrYM) + ' —— 考勤接口只保留本月 / 上月，'
+        + '更早的月份服务端会回落到上月。</b> '
+        + '<a href="javascript:void(0)" onclick="window.hrGotoYM(\'' + esc(acFrom.to || acFrom.from)
+        + '\')" style="color:var(--main-deep);font-weight:700;">切到 ' + esc(acFrom.to || acFrom.from) + '</a>';
+    }
+    if (gzYM && gzYM !== _hrYM){
+      mline += '<br>工资条是 ' + esc(gzYM) + ' 月的，与当前查看的 ' + esc(_hrYM) + ' 月不同，'
+        + '下面的差额不是同一个月对比。';
+    }
+    tips.push(mline);
     /* 本机要算得准，这两个参数必须和工资条对齐，否则差额没有意义 */
     if (!app.baseIsLocked){
       tips.push('<b style="color:var(--danger);">本月底薪未按月锁定</b>（当前用 '
@@ -3030,6 +3059,12 @@ function hrImport(){
   if (!box) return;
   var cache = hrCacheGet();
   var d = cache[_hrYM];
+  /* 当前月份没读过数据时，退回到缓存里最近读过的那个月：
+   * 服务端只给本月/上月，用户若停在没数据的月份，不该因此导不进来 */
+  if (!d){
+    var ks = Object.keys(cache).sort();
+    if (ks.length){ d = cache[ks[ks.length - 1]]; if (d && d.ym) hrGotoYM(d.ym); }
+  }
   if (!d){ toast('先点「读取HR数据」'); return; }
   var cs = box.querySelectorAll('input.hrDayChk');
   var pick = [];
@@ -3060,12 +3095,38 @@ function hrImport(){
     recs.push(rec);
     added++;
   }
+  if (!added){ toast('没有可导入的记录（选中日期都没有打卡时长）'); return; }
+  /* 导入的日期落在哪个月，就把首页 / 记录页 / HR 页一起切到那个月，
+   * 否则用户导入完还要自己找月份。考勤接口只有本月/上月两档，
+   * 服务端回落到上个月时，这里能自动跟着走。 */
+  var rng = hrMonthRange(built.recs.map(function(r){ return r.date; }));
+  var jumped = '';
+  if (rng.from){
+    if (rng.from !== rng.to) jumped = '（跨月 ' + rng.from + ' ~ ' + rng.to + '）';
+    hrGotoYM(rng.to);          /* 以最后一个月为落地月，保证刚导入的能看见 */
+    cache = hrCacheGet();
+  }
   setRecs(recs);
   resplitRecords();
   refreshHome();
   refreshRecords();
-  hrRenderCmp(cache[_hrYM]);
-  toast('导入完成：新增 ' + added + '，覆盖 ' + replaced + '，跳过 ' + skipped);
+  var ld = cache[_hrYM] || d;
+  hrRenderCmp(ld);
+  toast('导入完成：新增 ' + added + '，覆盖 ' + replaced + '，跳过 ' + skipped
+        + '；已切到 ' + ymLabel(_hrYM) + jumped);
+}
+
+/* 一组日期（YYYY-MM-DD）落在哪些月份：返回 {from:最早月, to:最晚月} */
+function hrMonthRange(dates){
+  var from = '', to = '';
+  if (!dates) return {from: from, to: to};
+  for (var i=0;i<dates.length;i++){
+    var m = String(dates[i] || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(m)) continue;
+    if (!from || m < from) from = m;
+    if (!to || m > to) to = m;
+  }
+  return {from: from, to: to};
 }
 
 /* 由网页打卡构造本机记录（纯函数，不碰 DOM / 存储，便于自检）。
@@ -3159,6 +3220,23 @@ function hrFetch(){
             rec.gzMsg = msg || '该月无工资条数据';
             var cache = hrCacheGet();
             cache[ym] = rec;
+            /* 服务端只保留本月/上月：请求更早的月份时会回落到上月。
+             * 若回来的数据不是我们要的月份，就以数据为准把月份对齐，
+             * 免得「HR 页显示 9 月、记录页还在 10 月」，导入落到错月份。 */
+            var dr = hrMonthRange(((rec.kq && rec.kq.rows) || []).map(function(x){ return x.id_date; }));
+            var actualYM = dr.to || '';
+            if (actualYM && actualYM !== ym){
+              cache[actualYM] = rec;          /* 也存一份到它真实所属的月份 */
+              hrCacheSet(cache);
+              hrGotoYM(actualYM);
+              try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:actualYM, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
+              hrBusy(false, '');
+              hrRender();
+              var hn2 = (rec.kq ? rec.kq.rows.length : 0);
+              toast('服务器只保留本月/上月，返回的是 ' + ymLabel(actualYM)
+                    + '（打卡 ' + hn2 + ' 天），已切到该月');
+              return;
+            }
             hrCacheSet(cache);
             try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:ym, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
             hrBusy(false, '');
@@ -3201,6 +3279,7 @@ window.hrShiftMonth = hrShiftMonth;
 window.hrClearCache = hrClearCache;
 window.hrSelAll = hrSelAll;
 window.hrImport = hrImport;
+window.hrGotoYM = hrGotoYM;
 window.pickType = pickType;
 window.setHours = setHours;
 window.punchChanged = punchChanged;
