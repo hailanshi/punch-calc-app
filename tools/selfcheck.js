@@ -451,7 +451,7 @@ S.storeSet('punchSalaryHrCache_v1', {
   '2026-08': {
     at: '2026-10-01 20:00', ym: '2026-08',
     kq: { rows: [{ id_date: '2026-08-01', calc_field1: 8, calc_field3: 3 }] },
-    card: { rows: [{ kq_date: '2026-08-01', card1: '2026-08-01 08:00' }] },
+    card: { rows: [{ kq_date: '2026-08-01', card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }] },
     gz: { gz_result: { item_61: '168.0', item_66: '60.0', item_67: '22.0', item_145: '4935.01' } },
     gzMsg: ''
   }
@@ -467,16 +467,101 @@ ok('考勤卡片渲染出正班工时', stub('hrAttRows').innerHTML.indexOf('正
 ok('考勤卡片渲染出平时加班', stub('hrAttRows').innerHTML.indexOf('平时加班') >= 0);
 ok('工资条卡片渲染出实发工资', stub('hrPayRows').innerHTML.indexOf('实发工资') >= 0);
 ok('工资条金额带 ¥ 符号', stub('hrPayRows').innerHTML.indexOf('¥4935.01') >= 0);
-ok('对照卡片渲染出差额', stub('hrCmpRows').innerHTML.indexOf('差额') >= 0);
+/* 对照：只比工资条，不再比考勤 */
+ok('对照卡片渲染出「本机计算」列', stub('hrCmpRows').innerHTML.indexOf('本机计算') >= 0);
+ok('对照卡片含实发工资一项', stub('hrCmpRows').innerHTML.indexOf('实发工资') >= 0);
+ok('对照不再输出考勤工时增减', stub('hrCmpRows').innerHTML.indexOf('正班工时（') < 0);
 ok('逐日明细渲染出日期', stub('hrDayRows').innerHTML.indexOf('2026-08-01') >= 0);
+ok('逐日明细带导入勾选框', stub('hrDayRows').innerHTML.indexOf('hrDayChk') >= 0);
+ok('逐日明细预演归类（→ 提示）', stub('hrDayRows').innerHTML.indexOf('→') >= 0);
+
+/* 调休补班日口径不一致检测：2026-09-20 是国务院定的补班日，
+ * 若工资条把它记成周休加班，必须给出告警（实测公司系统确实如此） */
+ok('2026-09-20 是国务院补班日（App 判为 workday）', S.classify('2026-09-20').type === 'workday',
+  S.classify('2026-09-20').type);
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-09': {
+    at: '2026-10-01 21:00', ym: '2026-09',
+    kq: { rows: [
+      { id_date: '2026-09-20', calc_field5: 11 },
+      { id_date: '2026-09-27', calc_field5: 11 }
+    ] },
+    card: { rows: [] },
+    gz: { gz_result: { item_61: '168.0', item_62: '2520.0', item_145: '4935.01' } },
+    gzMsg: ''
+  }
+});
+S._hrYM = '2026-09';
+S.hrRender();
+ok('检出调休补班日与工资条口径不一致', stub('hrCmpHint').innerHTML.indexOf('调休补班日口径不一致') >= 0);
+ok('告警里点出具体日期', stub('hrCmpHint').innerHTML.indexOf('2026-09-20') >= 0);
+ok('未误报 9/27（App 也算休息日）',
+  stub('hrCmpHint').innerHTML.indexOf('2026-09-27') < 0);
+
+/* 打卡时长解析：成对时间首尾相接累加（自动扣休息） */
+ok('hrDayHours 解析单段打卡',
+  S.hrDayHours({ card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }) === 9, 
+  S.hrDayHours({ card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }));
+ok('hrDayHours 三段打卡扣掉休息（真实数据 8:12~21:00）',
+  S.hrDayHours({
+    card1: '2026-09-01 08:12', card2: '2026-09-01 11:51',
+    card3: '2026-09-01 12:45', card4: '2026-09-01 17:21',
+    card5: '2026-09-01 17:55', card6: '2026-09-01 21:00'
+  }) === 11.33,
+  S.hrDayHours({
+    card1: '2026-09-01 08:12', card2: '2026-09-01 11:51',
+    card3: '2026-09-01 12:45', card4: '2026-09-01 17:21',
+    card5: '2026-09-01 17:55', card6: '2026-09-01 21:00'
+  }));
+ok('hrDayHours 无卡返回 0', S.hrDayHours({}) === 0);
+ok('hrDayHours 脏数据（单段超 16h）不计入',
+  S.hrDayHours({ card1: '2026-08-01 00:00', card2: '2026-08-02 20:00' }) === 0);
+ok('hrDayPunchText 拼出打卡时间', S.hrDayPunchText({ card1: '2026-08-01 08:12', card2: '2026-08-01 17:21' }) === '08:12 17:21');
+ok('hrDayPunchText 标注补卡', S.hrDayPunchText({ card1: '2026-08-01 08:12', is_buka1: 'Y' }) === '08:12(补)');
+
+/* 导入：把网页打卡写进本机记录，并按日期自动拆分（用纯函数测，不依赖 DOM 勾选）
+ * 用 2026-08-03（周一）而非 08-01（周六），才能验证「工作日 8h 正班 + 超出计加班」 */
+const impD = {
+  card: { rows: [{ kq_date: '2026-08-03', card1: '2026-08-03 08:00', card2: '2026-08-03 17:00' }] },
+  kq: { rows: [{ id_date: '2026-08-03', calc_field1: 8 }] }
+};
+const built = S.hrBuildImport(impD, ['2026-08-03']);
+ok('hrBuildImport 产出 1 条记录', built.recs.length === 1, JSON.stringify(built));
+const ir = built.recs[0] || {};
+ok('导入记录类型为上班打卡', ir.type === 'work', ir.type);
+ok('导入记录日期正确', ir.date === '2026-08-03', ir.date);
+ok('导入记录工时 = 打卡时长 9h', ir.hours === 9, ir.hours);
+ok('导入记录备注标明来源', String(ir.note).indexOf('HR导入') === 0, ir.note);
+ok('导入工时按日期自动拆分（工作日 8h 正班 + 1h 平日加班）', ir.n === 8 && ir.d === 1, ir.n + '/' + ir.d);
+/* 周六导入应全部进周末加班桶，验证日期判定真的生效 */
+const impSat = {
+  card: { rows: [{ kq_date: '2026-08-01', card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }] },
+  kq: { rows: [] }
+};
+const satRec = S.hrBuildImport(impSat, ['2026-08-01']).recs[0] || {};
+ok('周六导入全计周末加班', satRec.w === 9 && satRec.n === 0, satRec.n + '/' + satRec.w);
+ok('hrBuildImport 对无打卡日期计入 skipped',
+  S.hrBuildImport(impD, ['2026-08-02']).skipped === 1 &&
+  S.hrBuildImport(impD, ['2026-08-02']).recs.length === 0);
+ok('hrBuildImport 对空入参安全', S.hrBuildImport(null, null).recs.length === 0);
+/* 事假标注：站点把事假记在 calc_field19，导入时要提示 */
+const impD2 = {
+  card: { rows: [{ kq_date: '2026-08-03', card1: '2026-08-03 08:00', card2: '2026-08-03 17:00' }] },
+  kq: { rows: [{ id_date: '2026-08-03', calc_field19: 8 }] }
+};
+ok('事假日期在备注里被标注',
+  String(S.hrBuildImport(impD2, ['2026-08-03']).recs[0].note).indexOf('事假') >= 0,
+  S.hrBuildImport(impD2, ['2026-08-03']).recs[0].note);
+
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('服务器实际返回的是') >= 0 && script.indexOf('不一致') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));
 ok('HR 内联 handler 都已挂 window',
-  ['hrBack', 'hrFetch', 'hrShiftMonth', 'hrClearCache'].every(f => script.indexOf('window.' + f + ' = ' + f) >= 0));
+  ['hrBack', 'hrFetch', 'hrShiftMonth', 'hrClearCache', 'hrSelAll', 'hrImport']
+    .every(f => script.indexOf('window.' + f + ' = ' + f) >= 0));
 ok('HR 页 DOM id 齐备',
   ['page-hr', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrAttRows', 'hrAttHint',
-   'hrPayRows', 'hrPayHint', 'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrAccount', 'hrHomeHint']
+   'hrPayRows', 'hrPayHint', 'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount', 'hrHomeHint']
     .every(id => html.indexOf('id="' + id + '"') >= 0));
 
 console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败');

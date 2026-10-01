@@ -265,8 +265,8 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         </div>
       </div>
       <div class="card pad">
-        <button type="button" class="btn main block" onclick="window.navTo('hr')">📊 HR数据对照（考勤 / 工资条）</button>
-        <div class="hint" id="hrHomeHint" style="margin-top:8px;">读取公司 EHR 的考勤与工资条，和本机记录对照。</div>
+        <button type="button" class="btn main block" onclick="window.navTo('hr')">📊 HR工资条对照 / 导入打卡</button>
+        <div class="hint" id="hrHomeHint" style="margin-top:8px;">读取公司 EHR 的工资条与打卡数据：工资条和本机计算对照，打卡数据可导入本机记录。</div>
       </div>
       <div class="card pad" id="quickInfo" style="display:none;">
         <div style="font-size:13px; color:var(--ink2);" id="quickInfoText"></div>
@@ -575,7 +575,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
 
       <div class="card collapsed" id="hrCmpCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">对照本机记录<span class="chev">▶</span></button>
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">工资条对照<span class="chev">▶</span></button>
         <div class="cardBody">
           <div class="dl" id="hrCmpRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
           <div class="hint" id="hrCmpHint" style="margin-top:8px;"></div>
@@ -583,16 +583,23 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
 
       <div class="card collapsed" id="hrDayCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页逐日明细<span class="chev">▶</span></button>
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页打卡明细 / 导入<span class="chev">▶</span></button>
         <div class="cardBody">
+          <div class="hint" id="hrImpHint" style="margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <button type="button" class="btnText" onclick="window.hrSelAll(1)">全选</button>
+            <button type="button" class="btnText" onclick="window.hrSelAll(0)">全不选</button>
+            <button type="button" class="btn main" style="flex:1;padding:9px 12px;font-size:13px;" onclick="window.hrImport()">导入选中日期到打卡记录</button>
+          </div>
           <div id="hrDayRows" style="font-size:12px;"></div>
         </div>
       </div>
 
       <div class="card pad" id="hrAcctCard">
         <div style="font-size:13px;color:var(--ink2);">
-          <b>数据来源</b>：公司 EHR（hr.voopootech.net）。考勤 = 日考勤查询，工资条 = 个人工资查询。<br>
-          只做<b>读取</b>，不会改动服务器任何数据。取到的数据缓存在本机，供离线对照。
+          <b>数据来源</b>：公司 EHR（hr.voopootech.net）。工资条 = 个人工资查询，打卡 = 原始打卡记录。<br>
+          只做<b>读取</b>，不会改动服务器任何数据。取到的数据缓存在本机，供离线对照。<br>
+          <b>注意</b>：打卡数据服务器只保留<b>本月和上月</b>，更早的月份取不到。
         </div>
         <div class="hint" id="hrAccount" style="margin-top:8px;"></div>
       </div>
@@ -1443,7 +1450,8 @@ function refreshHome(){
       } else if (hmo < -1){
         hh2.innerHTML = ymLabel(_hrYM) + ' 早于服务器保留范围（只留本月/上月考勤），请到 HR 页切到上月。';
       } else {
-        hh2.textContent = '读取公司 EHR 的考勤与工资条，和本机记录对照。' + ymLabel(_hrYM) + ' 尚未读取。';
+        hh2.textContent = '读取公司 EHR 的工资条与打卡数据：工资条和本机计算对照，打卡数据可导入本机记录。'
+          + ymLabel(_hrYM) + ' 尚未读取。';
       }
     }
     $('recCountTop').textContent = getRecs().length;
@@ -2700,11 +2708,11 @@ function hrRender(){
 
 function hrRenderEmpty(){
   ['hrAttRows','hrPayRows','hrCmpRows','hrDayRows'].forEach(function(id){
-    var el = $(id); if (el) el.innerHTML = hrRow('--', '本月未读取');
+    var el = $(id); if (el) el.innerHTML = hrRow('--', '该月未读取');
   });
   var st = $('hrStatus');
   if (st) st.textContent = ymLabel(_hrYM) + ' 尚未读取。点「读取HR数据」登录公司 HR 取数。';
-  ['hrAttHint','hrPayHint','hrCmpHint'].forEach(function(id){ var el = $(id); if (el) el.innerHTML = ''; });
+  ['hrAttHint','hrPayHint','hrCmpHint','hrImpHint'].forEach(function(id){ var el = $(id); if (el) el.innerHTML = ''; });
 }
 
 /* 考勤字段 → 中文名（来自接口 format_mobile 的字段定义） */
@@ -2800,97 +2808,254 @@ function hrRenderPay(d){
   if (hint) hint.innerHTML = '来源：个人工资查询（工资表）。月份 ' + esc(String(res.item_2 || _hrYM));
 }
 
-/* 对照：网页考勤 vs 本机记录 */
+/* 工资条对照：网页工资条 vs 本机计算（不比对考勤） */
 function hrRenderCmp(d){
   var el = $('hrCmpRows'); if (!el) return;
-  var rows = (d.kq && d.kq.rows) || [];
   var gz = (d.gz && d.gz.gz_result) || null;
   var app = calcMonth(_hrYM);
-  var w = {normal:0, wd:0, we:0, hol:0, leave:0, absentDays:0};
-  for (var i=0;i<rows.length;i++){
-    var r = rows[i];
-    w.normal += hrNum(r.calc_field1);
-    w.wd     += hrNum(r.calc_field3);
-    w.we     += hrNum(r.calc_field5);
-    w.hol    += hrNum(r.calc_field8);
-    w.leave  += hrNum(r.calc_field19) + hrNum(r.calc_field20) + hrNum(r.calc_field21)
-              + hrNum(r.calc_field23) + hrNum(r.calc_field24) + hrNum(r.calc_field25)
-              + hrNum(r.calc_field26) + hrNum(r.calc_field27) + hrNum(r.calc_field28);
-    if (hrNum(r.calc_field19) >= 8) w.absentDays++;
-  }
-  var html = '';
-  html += '<div style="padding:6px 2px;font-size:12px;color:var(--ink3);">左=网页考勤　右=本机记录（差额 = 本机 − 网页）</div>';
-  var pairs = [
-    ['正班工时', w.normal, app.sum.normal],
-    ['平时加班', w.wd,     app.sum.wd],
-    ['周休加班', w.we,     app.sum.we],
-    ['法定加班', w.hol,    app.sum.hol]
-  ];
-  for (var p=0;p<pairs.length;p++){
-    var a = pairs[p][1], b = pairs[p][2];
-    var diff = Math.round((b - a) * 100) / 100;
-    var cls = (Math.abs(diff) < 0.005) ? 'green' : 'red';
-    html += hrRow(pairs[p][0] + '（' + hrH(a) + ' / ' + hrH(b) + '）',
-                  (diff > 0 ? '+' : '') + hrH(diff) + ' h', cls);
-  }
-  if (w.leave) html += hrRow('网页请假/异常工时', hrH(w.leave) + ' h');
-  if (gz){
-    var gzWd = hrNum(gz.item_66), gzWe = hrNum(gz.item_67), gzNor = hrNum(gz.item_65);
-    if (gzNor) html += hrRow('网页工资条正班合计', hrH(gzNor) + ' h', Math.abs(gzNor - w.normal) < 0.005 ? 'green' : '');
-    if (gzWd)  html += hrRow('网页工资条 H1（平时加班）', hrH(gzWd) + ' h', Math.abs(gzWd - w.wd) < 0.005 ? 'green' : '');
-    if (gzWe)  html += hrRow('网页工资条 H2（周休加班）', hrH(gzWe) + ' h', Math.abs(gzWe - w.we) < 0.005 ? 'green' : '');
-    html += hrRow('网页工资条 实发工资', hrM(gz.item_145));
-    html += hrRow('本机估算 实发（总收入）', fmtMoney(app.total));
-    var dgap = Math.round((app.total - hrNum(gz.item_145)) * 100) / 100;
-    html += hrRow('差额（本机 − 网页实发）', (dgap > 0 ? '+' : '') + hrH(dgap) + ' 元',
-                  Math.abs(dgap) < 0.005 ? 'green' : 'red');
-  }
-  el.innerHTML = html;
   var hint = $('hrCmpHint');
-  if (hint){
-    var mm = '';
-    if (rows.length){
-      var act = String(rows[0].id_date || '').slice(0, 7);
-      if (act && act !== _hrYM) mm = '<br><b style="color:var(--danger);">⚠ 网页考勤实际是 ' + esc(act)
-        + ' 月，与你要看的 ' + esc(_hrYM) + ' 月不一致，上面的差额无意义。</b>';
-    }
-    hint.innerHTML = '本机记录条数：' + app.recCount + ' 条。'
-      + '注意：网页「平时加班」与工资条 H1 是两种统计口径，数值可能不同；'
-      + '请假（如事假）在网页上不计入正班工时。' + mm;
+  if (!gz){
+    el.innerHTML = hrRow('工资条', d.gzMsg || '该月无工资条');
+    if (hint) hint.innerHTML = '服务器没有返回该月工资条，无法对照。可点「读取HR数据」重试，或换到有工资条的月份。';
+    return;
   }
+  var S = getSet();
+  var html = '';
+  html += '<div style="padding:6px 2px;font-size:12px;color:var(--ink3);">左=网页工资条　右=本机计算（差额 = 本机 − 网页）</div>';
+  /* 逐项对照：网页工资条项 vs 本机算出来的同名项 */
+  var pairs = [
+    ['正班工资',   gz.item_71,  app.base],
+    ['平时加班工资', gz.item_72,  app.otWd],
+    ['周末加班工资', gz.item_73,  app.otWe],
+    ['绩效奖金',   gz.item_83,  app.perf],
+    ['岗位津贴',   gz.item_86,  app.post],
+    ['全勤奖',     gz.item_90,  app.full],
+    ['餐补',       gz.item_191, app.meal],
+    ['个人社保',   gz.item_134, app.social],
+    ['应发工资',   gz.item_118, app.taxBase],
+    ['实发工资',   gz.item_145, app.total]
+  ];
+  for (var i=0;i<pairs.length;i++){
+    var wv = pairs[i][1];
+    if (wv === undefined || wv === null || wv === '') continue;
+    var a = hrNum(wv), b = hrNum(pairs[i][2]);
+    var gap = Math.round((b - a) * 100) / 100;
+    var cls = (Math.abs(gap) < 0.005) ? 'green' : 'red';
+    html += hrRow(pairs[i][0] + '（' + hrM(a) + ' / ' + hrM(b) + '）',
+                  (gap > 0 ? '+' : '') + hrH(gap), cls);
+  }
+  /* 工时口径（只作参考，不算差额） */
+  if (hrNum(gz.item_65)) html += hrRow('网页 正班合计', hrH(gz.item_65) + ' h');
+  if (hrNum(gz.item_66)) html += hrRow('网页 H1（平时加班）', hrH(gz.item_66) + ' h');
+  if (hrNum(gz.item_67)) html += hrRow('网页 H2（周休加班）', hrH(gz.item_67) + ' h');
+  el.innerHTML = html;
+
+  if (hint){
+    var tips = [];
+    /* 本机要算得准，这两个参数必须和工资条对齐，否则差额没有意义 */
+    if (!app.baseIsLocked){
+      tips.push('<b style="color:var(--danger);">本月底薪未按月锁定</b>（当前用 '
+        + fmtMoney(app.baseUsed) + '），工资条是 ' + hrM(gz.item_62)
+        + '。请到设置页把底薪改成 ' + hrNum(gz.item_62) + ' 并保存，差额才有意义。');
+    }
+    if (hrNum(gz.item_61)){
+      tips.push('工资条「应出勤工时」= ' + hrH(gz.item_61) + 'h，可到设置页「本月标准工时」手动填这个数（当前 '
+        + hrH(app.stdBase) + 'h）。');
+    }
+    /* 口径差异检测：调休补班日公司常按「休息日加班」计入工资条，
+     * 而 App 按国务院安排算作工作日 —— 这会直接造成加班项对不上。 */
+    var kgrows = (d.kq && d.kq.rows) || [];
+    var mismatch = [];
+    for (var z=0;z<kgrows.length;z++){
+      var rr = kgrows[z];
+      var dt = rr.id_date;
+      if (!dt) continue;
+      var dz = new Date(dt + 'T00:00:00');
+      var dow = dz.getDay();
+      if (dow !== 0 && dow !== 6) continue;              /* 只看落在周末的日期 */
+      if (classify(dt).type !== 'workday') continue;      /* 且 App 认定它是上班日（补班） */
+      if (hrNum(rr.calc_field5) > 0){
+        mismatch.push(dt + '（App 算工作日，工资条算周休加班 ' + hrH(rr.calc_field5) + 'h）');
+      }
+    }
+    if (mismatch.length){
+      tips.push('<b style="color:var(--danger);">⚠ 调休补班日口径不一致</b>：<br>'
+        + esc(mismatch.join('<br>'))
+        + '<br>按国务院放假安排这些周末是<b>上班日</b>（App 据此归到正班/平日加班），'
+        + '但公司工资条把它们算成了<b>周休加班</b>。加班项对不上是这个原因，不是算错。'
+        + '若不认可可在「节假日」页把该日改成自定义休息日。');
+    }
+    tips.push('本机记录 ' + app.recCount + ' 条。工时口径（H1/H2）只列出不比对，因为公司统计方式与 App 拆分规则不同。');
+    hint.innerHTML = tips.join('<br>');
+  }
+}
+
+/* 从原始打卡记录算某天的实际工时：把成对的打卡时间首尾相接累加。
+ * 例：08:12 11:51 / 12:45 17:21 / 17:55 21:00 → 上午段 + 下午段 + 加班段，自动扣掉休息。 */
+function hrDayHours(card){
+  if (!card) return 0;
+  var ts = [];
+  for (var t=1;t<=12;t++){
+    var v = card['card' + t];
+    if (!v) break;                      /* 卡序是连续的，遇到空就停 */
+    var m = String(v).match(/(\d{1,2}):(\d{2})/g);
+    if (!m || !m.length) break;
+    var last = m[m.length - 1].split(':');
+    var mins = parseInt(last[0], 10) * 60 + parseInt(last[1], 10);
+    ts.push(mins);
+  }
+  var total = 0;
+  for (var i=0;i+1<ts.length;i+=2){
+    var seg = ts[i+1] - ts[i];
+    if (seg > 0 && seg <= 16 * 60) total += seg;   /* 单段超 16h 视为脏数据 */
+  }
+  return Math.round((total / 60) * 100) / 100;
+}
+/* 取某天的打卡时间文本，如 08:12 11:51 / 12:45 17:21 */
+function hrDayPunchText(card){
+  if (!card) return '';
+  var out = [];
+  for (var t=1;t<=12;t++){
+    var v = card['card' + t];
+    if (!v) break;
+    out.push(String(v).slice(11, 16) + (card['is_buka' + t] === 'Y' ? '(补)' : ''));
+  }
+  return out.join(' ');
 }
 
 function hrRenderDays(d){
   var el = $('hrDayRows'); if (!el) return;
   var rows = (d.kq && d.kq.rows) || [];
-  if (!rows.length){ el.innerHTML = hrRow('--', '无数据'); return; }
   var cards = {};
   var crows = (d.card && d.card.rows) || [];
   for (var i=0;i<crows.length;i++){ cards[crows[i].kq_date] = crows[i]; }
-  var html = '<div style="padding:4px 2px;">';
+  var imp = $('hrImpHint');
+  if (imp){
+    if (!rows.length && !crows.length){ imp.textContent = '没有取到打卡数据。'; }
+    else {
+      imp.innerHTML = '勾选要导入的日期，会按当天日期自动判定工作日/周末/法定节假日并拆分工时。'
+        + '已有记录的日期需要确认才会覆盖。'
+        + (crows.length ? '<br>可导入 ' + crows.length + ' 天原始打卡。' : '');
+    }
+  }
+  if (!rows.length){
+    el.innerHTML = hrRow('--', '无打卡数据');
+    return;
+  }
+  var html = '<div style="padding:4px 2px;font-size:12px;color:var(--ink3);">'
+           + '每行显示导入后会计入哪一档（App 按国务院放假安排判定，可能与公司系统口径不同）</div>';
   for (var j=0;j<rows.length;j++){
     var r = rows[j];
+    var c = cards[r.id_date];
+    var hrs = hrDayHours(c);
+    var ptxt = hrDayPunchText(c);
     var nz = [];
     for (var k=0;k<HR_KQ_FIELDS.length;k++){
       var v = hrNum(r[HR_KQ_FIELDS[k][0]]);
       if (v) nz.push(HR_KQ_FIELDS[k][1] + ' ' + hrH(v));
     }
-    var c = cards[r.id_date];
-    var times = [];
-    if (c){
-      for (var t=1;t<=12;t++){
-        if (c['card' + t]) times.push(String(c['card' + t]).slice(11,16) + (c['is_buka' + t] === 'Y' ? '(补)' : ''));
-      }
+    /* 无打卡的日期（如事假/缺勤）不可导入 */
+    var canImp = hrs > 0;
+    /* 预演导入后的归类，让用户能提前看出与工资条的差异 */
+    var bucket = '', bCls = 'var(--ink3)';
+    if (canImp){
+      var sp = splitHours(r.id_date, 'work', hrs);
+      if (sp.h > 0) bucket = '法定加班 ' + hrH(sp.h) + 'h';
+      else if (sp.w > 0) bucket = '周末加班 ' + hrH(sp.w) + 'h';
+      else bucket = '正班 ' + hrH(sp.n) + 'h' + (sp.d > 0 ? ' + 平日加班 ' + hrH(sp.d) + 'h' : '');
+      bCls = 'var(--main-deep)';
     }
-    html += '<div style="padding:6px 2px;border-bottom:1px dashed var(--line);">'
-         + '<b>' + esc(r.id_date) + '</b> 周' + weekdayCn(r.id_date)
-         + '　<span style="color:var(--ink3);">' + esc(r.runs_name || '') + '</span><br>'
-         + '<span style="color:var(--ink2);">' + (times.length ? esc(times.join(' ')) : '无打卡') + '</span><br>'
-         + '<span>' + (nz.length ? esc(nz.join('　')) : '—') + '</span>'
+    var chk = canImp
+      ? '<input type="checkbox" class="hrDayChk" data-date="' + esc(r.id_date) + '" checked style="width:17px;height:17px;margin-right:7px;vertical-align:-3px;">'
+      : '<span style="display:inline-block;width:17px;margin-right:7px;"></span>';
+    html += '<div style="padding:7px 2px;border-bottom:1px dashed var(--line);'
+         + (canImp ? '' : 'opacity:.55;') + '">'
+         + chk + '<b>' + esc(r.id_date) + '</b> 周' + weekdayCn(r.id_date)
+         + '　<span style="color:var(--ink3);">' + esc(r.runs_name || '') + '</span>'
+         + (canImp ? '　<b style="color:var(--main-deep);">' + hrH(hrs) + 'h</b>' : '')
+         + (bucket ? '<br><span style="margin-left:24px;color:' + bCls + ';font-weight:600;">→ ' + esc(bucket) + '</span>' : '')
+         + '<br><span style="color:var(--ink2);margin-left:24px;">'
+         + (ptxt ? esc(ptxt) : '无打卡') + '</span>'
+         + (nz.length ? '<br><span style="margin-left:24px;">' + esc(nz.join('　')) + '</span>' : '')
          + '</div>';
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+/* ---------- 导入：网页打卡 → 本机打卡记录 ---------- */
+function hrSelAll(on){
+  var box = $('hrDayRows');
+  if (!box) return;
+  var cs = box.querySelectorAll('input.hrDayChk');
+  for (var i=0;i<cs.length;i++) cs[i].checked = !!on;
+}
+function hrImport(){
+  var box = $('hrDayRows');
+  if (!box) return;
+  var cache = hrCacheGet();
+  var d = cache[_hrYM];
+  if (!d){ toast('先点「读取HR数据」'); return; }
+  var cs = box.querySelectorAll('input.hrDayChk');
+  var pick = [];
+  for (var j=0;j<cs.length;j++){ if (cs[j].checked) pick.push(cs[j].getAttribute('data-date')); }
+  if (!pick.length){ toast('没有勾选任何日期'); return; }
+
+  var recs = getRecs();
+  var existMap = {};
+  for (var k=0;k<recs.length;k++){ existMap[recs[k].date] = 1; }
+  var dup = 0;
+  for (var m=0;m<pick.length;m++){ if (existMap[pick[m]]) dup++; }
+  var overwrite = true;
+  if (dup > 0){
+    overwrite = window.confirm('选中 ' + pick.length + ' 天，其中 ' + dup + ' 天已有记录。\n\n'
+      + '「确定」= 用网页打卡覆盖这些日期\n「取消」= 保留已有记录，只导入没有记录的日期');
+  }
+
+  /* 纯数据部分交给 hrBuildImport，便于单测；这里只负责剔重与写库 */
+  var built = hrBuildImport(d, pick);
+  var added = 0, replaced = 0, skipped = built.skipped;
+  for (var n=0;n<built.recs.length;n++){
+    var rec = built.recs[n];
+    if (existMap[rec.date]){
+      if (!overwrite){ skipped++; continue; }
+      for (var q=recs.length-1;q>=0;q--){ if (recs[q].date === rec.date) recs.splice(q,1); }
+      replaced++;
+    }
+    recs.push(rec);
+    added++;
+  }
+  setRecs(recs);
+  resplitRecords();
+  refreshHome();
+  refreshRecords();
+  hrRenderCmp(cache[_hrYM]);
+  toast('导入完成：新增 ' + added + '，覆盖 ' + replaced + '，跳过 ' + skipped);
+}
+
+/* 由网页打卡构造本机记录（纯函数，不碰 DOM / 存储，便于自检）。
+ * 返回 {recs:[...], skipped:N}；无有效打卡时长的日期计入 skipped。 */
+function hrBuildImport(d, dates){
+  var out = [], skipped = 0;
+  if (!d || !dates) return {recs: out, skipped: skipped};
+  var cards = {};
+  var crows = (d.card && d.card.rows) || [];
+  for (var i=0;i<crows.length;i++){ cards[crows[i].kq_date] = crows[i]; }
+  var kgMap = {};
+  var krows = (d.kq && d.kq.rows) || [];
+  for (var j=0;j<krows.length;j++){ kgMap[krows[j].id_date] = krows[j]; }
+  for (var n=0;n<dates.length;n++){
+    var date = dates[n];
+    var c = cards[date];
+    var hrs = hrDayHours(c);
+    if (hrs <= 0){ skipped++; continue; }
+    var note = 'HR导入 ' + hrDayPunchText(c);
+    /* 站点把事假记在 calc_field19，导入的是打卡时长，标注出来方便人工核对 */
+    var kg = kgMap[date];
+    if (kg && hrNum(kg.calc_field19) > 0) note += '｜站点记为事假 ' + hrH(kg.calc_field19) + 'h，请自行核对';
+    out.push(buildRec(date, 'work', hrs, note));
+  }
+  return {recs: out, skipped: skipped};
 }
 
 /* ---------- 取数流程：登录 → 考勤 → 原始打卡 → 工资条 ---------- */
@@ -2999,6 +3164,8 @@ window.hrBack = hrBack;
 window.hrFetch = hrFetch;
 window.hrShiftMonth = hrShiftMonth;
 window.hrClearCache = hrClearCache;
+window.hrSelAll = hrSelAll;
+window.hrImport = hrImport;
 window.pickType = pickType;
 window.setHours = setHours;
 window.punchChanged = punchChanged;
