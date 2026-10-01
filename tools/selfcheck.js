@@ -390,17 +390,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4','g5'].filter(g => head
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.0', S.APP_VER === '2.0', S.APP_VER);
-ok('title 带 v2.0', /<title>[^<]*v2\.0[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.0', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.0</string>') >= 0);
+ok('APP_VER = 2.1', S.APP_VER === '2.1', S.APP_VER);
+ok('title 带 v2.1', /<title>[^<]*v2\.1[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.1', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.1</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：底薪', stub('sumBase').textContent.indexOf('底薪') >= 0, stub('sumBase').textContent);
 ok('折叠标题摘要：加班方式', stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.0') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.1') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });
@@ -423,6 +423,61 @@ ok('保存后两套加班参数都在', saved.otRate1 === 24 && saved.ot1 === 1.
 ok('保存后 otMode 保持', S.otModeOf(saved) === 'rate', saved.otMode);
 ok('std 兜底值仍在（非 NaN）', isFinite(saved.std) && saved.std > 0, saved.std);
 ok('底薪按月落库', parseFloat(S.getBaseMap()['2026-10']) === 2800, JSON.stringify(S.getBaseMap()));
+
+/* ---------- 10. HR 数据对照 ---------- */
+section('10. HR 数据对照');
+/* 密码算法：必须与真实抓包值逐字节一致（这是最容易写错的一处） */
+ok('hrSecret 是函数', typeof S.hrSecret === 'function');
+if (typeof S.hrSecret === 'function') {
+  ok("hrSecret('testpw') 与真实请求一致",
+    S.hrSecret('testpw') === '200203218205221224222231204205', S.hrSecret('testpw'));
+  ok('hrSecret 长度随密码增长', S.hrSecret('12345678').length > S.hrSecret('123456').length);
+}
+ok('HR 考勤字段映射有正班/平时加班/周休加班',
+  S.HR_KQ_FIELDS.some(f => f[0] === 'calc_field1') &&
+  S.HR_KQ_FIELDS.some(f => f[0] === 'calc_field3') &&
+  S.HR_KQ_FIELDS.some(f => f[0] === 'calc_field5'));
+ok('HR 工资条映射有应出勤/H1/H2/实发',
+  S.HR_GZ_FIELDS.some(f => f[0] === 'item_61') &&
+  S.HR_GZ_FIELDS.some(f => f[0] === 'item_66') &&
+  S.HR_GZ_FIELDS.some(f => f[0] === 'item_67') &&
+  S.HR_GZ_FIELDS.some(f => f[0] === 'item_145'));
+ok('考勤字段名取自接口定义（中文非空）',
+  S.HR_KQ_FIELDS.every(f => typeof f[1] === 'string' && f[1].length > 0));
+/* 缓存读写 + 渲染不抛异常 */
+S.storeSet('punchSalaryHrCache_v1', {});
+ok('HR 缓存初始为空', Object.keys(S.hrCacheGet()).length === 0);
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-08': {
+    at: '2026-10-01 20:00', ym: '2026-08',
+    kq: { rows: [{ id_date: '2026-08-01', calc_field1: 8, calc_field3: 3 }] },
+    card: { rows: [{ kq_date: '2026-08-01', card1: '2026-08-01 08:00' }] },
+    gz: { gz_result: { item_61: '168.0', item_66: '60.0', item_67: '22.0', item_145: '4935.01' } },
+    gzMsg: ''
+  }
+});
+ok('HR 缓存可写可读', !!S.hrCacheGet()['2026-08']);
+let hrErr = '';
+try {
+  S._hrYM = '2026-08';
+  S.hrRender();
+} catch (e) { hrErr = e.message; }
+ok('hrRender 不抛异常', hrErr === '', hrErr);
+ok('考勤卡片渲染出正班工时', stub('hrAttRows').innerHTML.indexOf('正班工时') >= 0);
+ok('考勤卡片渲染出平时加班', stub('hrAttRows').innerHTML.indexOf('平时加班') >= 0);
+ok('工资条卡片渲染出实发工资', stub('hrPayRows').innerHTML.indexOf('实发工资') >= 0);
+ok('工资条金额带 ¥ 符号', stub('hrPayRows').innerHTML.indexOf('¥4935.01') >= 0);
+ok('对照卡片渲染出差额', stub('hrCmpRows').innerHTML.indexOf('差额') >= 0);
+ok('逐日明细渲染出日期', stub('hrDayRows').innerHTML.indexOf('2026-08-01') >= 0);
+/* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
+ok('跨月时给出告警文案', script.indexOf('服务器实际返回的是') >= 0 && script.indexOf('不一致') >= 0);
+ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));
+ok('HR 内联 handler 都已挂 window',
+  ['hrBack', 'hrFetch', 'hrShiftMonth', 'hrClearCache'].every(f => script.indexOf('window.' + f + ' = ' + f) >= 0));
+ok('HR 页 DOM id 齐备',
+  ['page-hr', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrAttRows', 'hrAttHint',
+   'hrPayRows', 'hrPayHint', 'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrAccount', 'hrHomeHint']
+    .every(id => html.indexOf('id="' + id + '"') >= 0));
 
 console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败');
 process.exit(fails ? 1 : 0);

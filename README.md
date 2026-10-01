@@ -1,8 +1,41 @@
-# 打卡工资计算器 v2.0
+# 打卡工资计算器 v2.1
 
 单文件 `打卡工资计算器.html` 实现全部功能，无后端、纯本机存储；可直接双击用浏览器打开，
 iPhone Safari 打开后「添加到主屏幕」即作为 PWA 使用；`ios-shell/` 内含极简 WKWebView 壳工程，
 可交叉编译为 TrollStore 可安装的 IPA。
+
+## v2.1 变更要点
+- **新增「HR数据对照」页**：登录公司 EHR（`hr.voopootech.net`）读取**网页考勤**与**工资条**，
+  与本机打卡记录并排对照，可看每项差额（本机 − 网页）。
+- iOS 壳新增 **`hrFetch` 原生通道**：带 Cookie 会话的 POST 取数，规避 WKWebView 跨域限制；
+  数据以 base64 回传并由原生自动识别 UTF-8 / GB18030 编码（服务端有不少 GBK 字段）。
+- 版本号 2.1（`APP_VER`；iOS 两处 `Info.plist` 同步为 2.1 / build 3）。
+
+## HR数据对照（v2.1）
+
+「首页 → 📊 HR数据对照」进入。点「读取HR数据」自动登录并取数，结果缓存在本机供离线对照。
+
+| 取数项 | 接口 | 说明 |
+| --- | --- | --- |
+| 登录 | `POST /LoginController.ashx` | 密码经站点 `Set_Secret` 混淆后提交 |
+| 日考勤 | `ctlKqDetail.ashx?action=detail&month=N` | 正班 / 平时加班 / 周休加班 / 法定加班 / 各类请假 |
+| 原始打卡 | `ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=N` | card1~card12，`is_bukaN=Y` 表示补卡 |
+| 工资条 | `ctlGzsDetailRecordMobileMon.ashx?action=formatMulti&type_id=1&month=YYYY-MM` | 应出勤 / H1 / H2 / 应发 / 实发等 |
+
+### 已知口径与限制（重要）
+- **考勤接口只有「本月 / 上月」两档**：`month` 看似是相对偏移，实测 `0`=本月、任何负数都回落到上月，
+  更早的月份取不到。若是跨月（例如看 8 月工资条却拿到 9 月考勤），页面会**红色告警**提示月份不一致。
+- **考勤字段口径**（取自接口 `format_mobile` 的字段定义，勿臆测）：
+  `calc_field1`=正班_工时、`calc_field3`=平时_加班、`calc_field5`=周休_加班、`calc_field8`=法定_加班、
+  `calc_field19`=**事假_工时**、`calc_field20`=病假、`calc_field21`=年假、`calc_field11/12`=迟到/早退分钟。
+  实测 2026-08：正班 136h + 事假 32h = 168h = 工资条「应出勤工时」，口径自洽。
+- **「平时加班」与工资条 H1 不是同一口径**（实测 51h vs 60h），页面把两者都列出供人工核对，不做换算。
+- 账号密码目前**内联在 HTML 里**（见下方「安全提示」）。
+
+### 安全提示
+`hr.voopootech.net` 的账号密码写在 `打卡工资计算器.html` 的 `HR_ACCT` / `HR_PWD` 常量里，
+而本仓库是**公开仓库**，推送后该口令会进入 git 历史。若要收紧，把这两个常量改成
+从 localStorage 读取、在 App 内首次输入即可（`hrFetch()` 不用改）。
 
 ## v2.0 变更要点
 - **每月标准工时（两套方案）**：方案 A 手动填（工资单上的「应出勤工时」）· 方案 B 联网更新（工作日×8）。

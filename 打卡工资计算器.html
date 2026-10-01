@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.0</title>
+<title>打卡工资计算器 v2.1</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -263,6 +263,10 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
           <div class="dl" id="hoursRows"></div>
           <div class="hint" id="hoursHint" style="margin-top:8px;"></div>
         </div>
+      </div>
+      <div class="card pad">
+        <button type="button" class="btn main block" onclick="window.navTo('hr')">📊 HR数据对照（考勤 / 工资条）</button>
+        <div class="hint" id="hrHomeHint" style="margin-top:8px;">读取公司 EHR 的考勤与工资条，和本机记录对照。</div>
       </div>
       <div class="card pad" id="quickInfo" style="display:none;">
         <div style="font-size:13px; color:var(--ink2);" id="quickInfoText"></div>
@@ -533,6 +537,68 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     </div>
   </section>
 
+  <!-- ==================== HR 数据对照（网页考勤 / 工资条） ==================== -->
+  <section id="page-hr" class="page">
+    <header class="topbar">
+      <button type="button" class="btnText" onclick="window.hrBack()">‹ 首页</button>
+      <div class="title">HR数据对照</div>
+      <span style="width:52px;"></span>
+    </header>
+    <div class="scroll">
+      <div class="card pad">
+        <div class="monthBar">
+          <button type="button" class="mIcon" onclick="window.hrShiftMonth(-1)">‹</button>
+          <div class="ym" id="hrMonthLabel">----</div>
+          <button type="button" class="mIcon" onclick="window.hrShiftMonth(1)">›</button>
+        </div>
+        <div class="hint" id="hrStatus">尚未读取。点下方按钮登录公司 HR 系统取数。</div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button type="button" class="btn main block" style="flex:1;" id="hrFetchBtn" onclick="window.hrFetch()">读取HR数据</button>
+          <button type="button" class="btnText" onclick="window.hrClearCache()">清除缓存</button>
+        </div>
+      </div>
+
+      <div class="card collapsed" id="hrAttCard">
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页考勤<span class="chev">▶</span></button>
+        <div class="cardBody">
+          <div class="dl" id="hrAttRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
+          <div class="hint" id="hrAttHint" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <div class="card collapsed" id="hrPayCard">
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页工资条<span class="chev">▶</span></button>
+        <div class="cardBody">
+          <div class="dl" id="hrPayRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
+          <div class="hint" id="hrPayHint" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <div class="card collapsed" id="hrCmpCard">
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">对照本机记录<span class="chev">▶</span></button>
+        <div class="cardBody">
+          <div class="dl" id="hrCmpRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
+          <div class="hint" id="hrCmpHint" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <div class="card collapsed" id="hrDayCard">
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页逐日明细<span class="chev">▶</span></button>
+        <div class="cardBody">
+          <div id="hrDayRows" style="font-size:12px;"></div>
+        </div>
+      </div>
+
+      <div class="card pad" id="hrAcctCard">
+        <div style="font-size:13px;color:var(--ink2);">
+          <b>数据来源</b>：公司 EHR（hr.voopootech.net）。考勤 = 日考勤查询，工资条 = 个人工资查询。<br>
+          只做<b>读取</b>，不会改动服务器任何数据。取到的数据缓存在本机，供离线对照。
+        </div>
+        <div class="hint" id="hrAccount" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ==================== 说明 ==================== -->
   <section id="page-help" class="page">
     <header class="topbar">
@@ -656,7 +722,7 @@ var LS_THEME= 'punchSalaryTheme_v1';
 var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 
-var APP_VER = '2.0';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.1';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   base:2700, social:420, full:100, perf:50, post:400,
@@ -889,6 +955,40 @@ function apiGetText(url, timeoutMs, cb){
     .catch(function(){ clearTimeout(timer); cb(false,''); });
 }
 
+/* =====================================================================
+ * HR 数据通道：走原生 hrFetch（POST + Cookie 会话），网页里退化为 fetch
+ * 原生侧回调 window.__hrFetchResult({id,status,ok,text,b64})
+ * ===================================================================*/
+var _hrSeq = 0, _hrCbs = {};
+function hrNativeOn(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hrFetch); }
+window.__hrFetchResult = function(res){
+  if (!res || !res.id) return;
+  var cb = _hrCbs[res.id];
+  if (!cb) return;
+  _hrCbs[res.id] = null;
+  try{ cb(!!res.ok, res.status || 0, String(res.text || '')); }catch(e){}
+};
+function hrPost(url, body, timeoutMs, cb){
+  cb = cb || function(){};
+  var tms = timeoutMs || 25000;
+  var id = 'hr' + (_hrSeq++);
+  var done = false;
+  var fire = function(ok, status, text){ if (done) return; done = true; _hrCbs[id] = null; cb(ok, status, text); };
+  _hrCbs[id] = fire;
+  if (hrNativeOn()){
+    try{ window.webkit.messageHandlers.hrFetch.postMessage({id:id, url:url, method:'POST', body:body||'', timeout:tms}); }
+    catch(e){ fire(false, 0, ''); return; }
+  } else {
+    /* 浏览器 / PWA：同源或已允许跨域时可用；file:// 下通常会被 CORS 拦掉 */
+    try{
+      fetch(url, {method:'POST', credentials:'include', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, body:body||''})
+        .then(function(r){ return r.text().then(function(t){ fire(r.ok, r.status, t); }); })
+        .catch(function(){ fire(false, 0, ''); });
+    }catch(e){ fire(false, 0, ''); }
+  }
+  setTimeout(function(){ fire(false, 0, ''); }, tms + 1500);
+}
+
 /* ---------------- 工具 ---------------- */
 function $(id){ return document.getElementById(id); }
 function esc(s){ s = String(s === undefined || s === null ? '' : s);
@@ -1006,7 +1106,7 @@ function ymNow(){ var d = new Date(); return d.getFullYear() + '-' + pad2(d.getM
 function showPage(name){
   /* 离开打卡页即取消未完成的“编辑”状态，避免残留到下次进入 */
   if (name !== 'punch' && _editDate){ _editDate = ''; _manualType = false; }
-  var pages = ['home','punch','records','settings','holidays','help'];
+  var pages = ['home','punch','records','settings','holidays','help','hr'];
   for (var i=0;i<pages.length;i++){
     var el = $('page-' + pages[i]);
     if (el) el.className = 'page' + (pages[i]===name ? ' on' : '');
@@ -1024,6 +1124,7 @@ function showPage(name){
   if (name==='records'){ refreshRecords(); }
   if (name==='settings'){ renderSettings(); }
   if (name==='holidays'){ renderHolidays(); }
+  if (name==='hr'){ hrRender(); }
   syncNav();
 }
 function syncNav(){
@@ -1327,6 +1428,24 @@ function refreshHome(){
       qi.style.display = 'block';
       $('quickInfoText').innerHTML = '📌 本月还没有记录。点下方「打卡」手动录入，或在打卡页用<b>「补卡到今天 / 本月全部补卡」</b>一键补齐工作日。';
     } else qi.style.display = 'none';
+    /* HR 对照入口的状态提示：显示 HR 页当前查看的那个月是否已读过网页数据 */
+    var hh2 = $('hrHomeHint');
+    if (hh2){
+      hrInitYM();
+      var hc = hrCacheGet();
+      var hd = hc[_hrYM];
+      var hmo = hrMonthOffset(_hrYM);
+      if (hd){
+        var hn = (hd.kq && hd.kq.rows) ? hd.kq.rows.length : 0;
+        hh2.innerHTML = ymLabel(_hrYM) + ' 已读取：考勤 ' + hn + ' 天'
+          + (hd.gz ? '，工资条已取到' : '，无工资条')
+          + '（' + esc(String(hd.at || '')) + '）';
+      } else if (hmo < -1){
+        hh2.innerHTML = ymLabel(_hrYM) + ' 早于服务器保留范围（只留本月/上月考勤），请到 HR 页切到上月。';
+      } else {
+        hh2.textContent = '读取公司 EHR 的考勤与工资条，和本机记录对照。' + ymLabel(_hrYM) + ' 尚未读取。';
+      }
+    }
     $('recCountTop').textContent = getRecs().length;
   }catch(e){
     toast('首页刷新失败：' + (e && e.message ? e.message : e), 'bad');
@@ -2488,6 +2607,371 @@ window.addEventListener('error', function(e){
 });
 
 /* ---------------- 启动 ---------------- */
+/* =====================================================================
+ * HR 数据对照：读取公司 EHR 的考勤与工资条，与本机打卡记录对照
+ * 接口（逆向自 hr.voopootech.net 移动端）：
+ *   登录     POST /LoginController.ashx
+ *   日考勤   POST /ehr_sys/kqs/Controller/ctlKqDetail.ashx?action=detail&month=N
+ *   原始打卡 POST /ehr_sys/kqs/controller/ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=N
+ *   工资条   POST /ehr_sys/gzs/Controller/ctlGzsDetailRecordMobileMon.ashx?action=formatMulti&type_id=1&month=YYYY-MM
+ * month 是「相对当前月的偏移」：0=本月，-1=上月。更早的月份服务器会回落到上月。
+ * ===================================================================*/
+var HR_ORIGIN = 'https://hr.voopootech.net';
+var HR_ACCT   = 'T00001';
+var HR_PWD    = 'testpw';
+var LS_HRCACHE = 'punchSalaryHrCache_v1';
+
+/* 登录密码的「加密」：站点 CEComm.js 里 Set_Secret 的等价实现
+ * 主体：每字符 → (charCode + 100 + (i+1)*2) 的十进制串直接相连（不补零）
+ * 首尾：固定标记 200 / 203 / 204 / 205（由 Set_Secret 里 'c'/'e' 的 charCode 推出）
+ * 实测 'testpw' → 200203218205221224222231204205，与真实请求逐字节一致。 */
+function hrSecret(a){
+  var l = '';
+  for (var i=0;i<a.length;i++){ l += String(a.charCodeAt(i) + 100 + (i+1)*2); }
+  return '200' + '203' + l + '204' + '205';
+}
+function hrForm(o){
+  var p = [];
+  for (var k in o){ if (o.hasOwnProperty(k)) p.push(encodeURIComponent(k) + '=' + encodeURIComponent(o[k])); }
+  return p.join('&');
+}
+function hrCacheGet(){ var c = storeGet(LS_HRCACHE, null); return (c && typeof c === 'object') ? c : {}; }
+function hrCacheSet(c){ storeSet(LS_HRCACHE, c); }
+
+/* 当前查看的 HR 月份（YYYY-MM）。默认取上月（工资条通常次月才出）。 */
+var _hrYM = '';
+function hrInitYM(){
+  if (_hrYM) return;
+  var d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  _hrYM = d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+}
+/* 目标月份 → 接口的 month 偏移（相对当前月） */
+function hrMonthOffset(ym){
+  var p = ymParts(ym);
+  var now = new Date();
+  return (p.y - now.getFullYear()) * 12 + (p.m - (now.getMonth() + 1));
+}
+function hrShiftMonth(d){
+  hrInitYM();
+  var p = ymParts(_hrYM);
+  var nd = new Date(p.y, p.m - 1 + d, 1);
+  _hrYM = nd.getFullYear() + '-' + pad2(nd.getMonth() + 1);
+  hrRender();
+}
+function hrBack(){ navTo('home'); }
+function hrClearCache(){
+  storeSet(LS_HRCACHE, {});
+  hrRender();
+  toast('已清除 HR 缓存');
+}
+
+/* ---------- 渲染 ---------- */
+function hrRow(k, v, cls){
+  return '<div><span class="k">' + esc(k) + '</span><span class="v' + (cls ? ' ' + cls : '') + '">' + esc(v) + '</span></div>';
+}
+function hrNum(v){
+  var n = parseFloat(v);
+  return isFinite(n) ? n : 0;
+}
+function hrH(v){ return (Math.round(hrNum(v)*100)/100).toFixed(2); }
+function hrM(v){ return fmtMoney(hrNum(v)); }
+
+function hrRender(){
+  hrInitYM();
+  var lbl = $('hrMonthLabel'); if (lbl) lbl.textContent = ymLabel(_hrYM);
+  var acct = $('hrAccount');
+  if (acct){
+    acct.innerHTML = '登录账号：<b>' + esc(HR_ACCT) + '</b>　'
+      + (hrNativeOn() ? '<span style="color:#3d9a63;">原生通道可用</span>'
+                      : '<span style="color:var(--danger);">原生通道不可用（浏览器里打开会被跨域拦截，请在 App 内使用）</span>');
+  }
+  var cache = hrCacheGet();
+  var d = cache[_hrYM];
+  if (!d){ hrRenderEmpty(); return; }
+  hrRenderAtt(d);
+  hrRenderPay(d);
+  hrRenderCmp(d);
+  hrRenderDays(d);
+  var st = $('hrStatus');
+  if (st) st.textContent = '已读取（' + (d.at || '未知时间') + '）。数据缓存在本机。';
+}
+
+function hrRenderEmpty(){
+  ['hrAttRows','hrPayRows','hrCmpRows','hrDayRows'].forEach(function(id){
+    var el = $(id); if (el) el.innerHTML = hrRow('--', '本月未读取');
+  });
+  var st = $('hrStatus');
+  if (st) st.textContent = ymLabel(_hrYM) + ' 尚未读取。点「读取HR数据」登录公司 HR 取数。';
+  ['hrAttHint','hrPayHint','hrCmpHint'].forEach(function(id){ var el = $(id); if (el) el.innerHTML = ''; });
+}
+
+/* 考勤字段 → 中文名（来自接口 format_mobile 的字段定义） */
+var HR_KQ_FIELDS = [
+  ['calc_field1',  '正班工时'],
+  ['calc_field3',  '平时加班'],
+  ['calc_field5',  '周休加班'],
+  ['calc_field8',  '法定加班'],
+  ['calc_field19', '事假工时'],
+  ['calc_field20', '病假工时'],
+  ['calc_field21', '年假工时'],
+  ['calc_field11', '迟到分钟'],
+  ['calc_field12', '早退分钟'],
+  ['calc_field29', '签卡次数'],
+  ['calc_field28', '无薪假工时']
+];
+/* 工资条 item → 中文名（来自工资条接口的 gz_format.Columns） */
+var HR_GZ_FIELDS = [
+  ['item_61',  '应出勤工时'],
+  ['item_65',  '正班合计'],
+  ['item_66',  'H1(平时加班)'],
+  ['item_67',  'H2(周休加班)'],
+  ['item_62',  '基本工资'],
+  ['item_71',  '正班工资'],
+  ['item_72',  '平时加班工资'],
+  ['item_73',  '周末加班工资'],
+  ['item_80',  '当月应发出勤工资'],
+  ['item_83',  '绩效奖金'],
+  ['item_86',  '岗位津贴'],
+  ['item_90',  '全勤奖'],
+  ['item_191', '餐补'],
+  ['item_89',  '奖金汇总'],
+  ['item_99',  '其它补贴合计'],
+  ['item_118', '应发工资'],
+  ['item_134', '个人社保'],
+  ['item_145', '实发工资']
+];
+
+function hrRenderAtt(d){
+  var el = $('hrAttRows'); if (!el) return;
+  var rows = (d.kq && d.kq.rows) || [];
+  if (!rows.length){ el.innerHTML = hrRow('考勤', '无数据'); return; }
+  var sum = {};
+  for (var i=0;i<rows.length;i++){
+    for (var j=0;j<HR_KQ_FIELDS.length;j++){
+      var f = HR_KQ_FIELDS[j][0];
+      var v = hrNum(rows[i][f]);
+      if (v) sum[f] = (sum[f] || 0) + v;
+    }
+  }
+  var html = '';
+  html += hrRow('考勤天数', rows.length + ' 天');
+  for (var k=0;k<HR_KQ_FIELDS.length;k++){
+    var f2 = HR_KQ_FIELDS[k][0];
+    if (sum[f2]) html += hrRow(HR_KQ_FIELDS[k][1], hrH(sum[f2]) + ' h');
+  }
+  el.innerHTML = html;
+  var hint = $('hrAttHint');
+  if (hint){
+    var d1 = rows[0].id_date || '';
+    var d2 = rows[rows.length - 1].id_date || '';
+    var actual = d1.slice(0, 7);
+    var extra = [];
+    if (d.card && d.card.rows) extra.push('原始打卡 ' + d.card.rows.length + ' 天');
+    var warn = '';
+    /* 考勤接口只有「本月 / 上月」两档，请求更早月份会被服务端回落到上月，
+     * 这时实际区间会和你要查看的月份不一致 —— 必须显式警告，否则对照会算错。 */
+    if (actual && actual !== _hrYM){
+      warn = '<br><b style="color:var(--danger);">⚠ 服务器实际返回的是 ' + esc(actual)
+           + ' 的数据，不是你要看的 ' + esc(_hrYM) + '。考勤接口只保留本月/上月，'
+           + '跨月对照工资条会得出错误差额，请自行核对月份。</b>';
+    }
+    hint.innerHTML = '数据区间 ' + esc(d1) + ' ~ ' + esc(d2)
+      + (extra.length ? '（' + esc(extra.join('，')) + '）' : '') + warn;
+  }
+}
+
+function hrRenderPay(d){
+  var el = $('hrPayRows'); if (!el) return;
+  var gz = d.gz;
+  if (!gz || !gz.gz_result){ el.innerHTML = hrRow('工资条', d.gzMsg || '无数据'); return; }
+  var res = gz.gz_result;
+  var html = '';
+  for (var i=0;i<HR_GZ_FIELDS.length;i++){
+    var f = HR_GZ_FIELDS[i][0];
+    var v = res[f];
+    if (v === undefined || v === null || v === '') continue;
+    var isMoney = /工资|津贴|奖金|补贴|餐补|社保/.test(HR_GZ_FIELDS[i][1]);
+    html += hrRow(HR_GZ_FIELDS[i][1], isMoney ? hrM(v) : esc(String(v)));
+  }
+  el.innerHTML = html || hrRow('工资条', '无数据');
+  var hint = $('hrPayHint');
+  if (hint) hint.innerHTML = '来源：个人工资查询（工资表）。月份 ' + esc(String(res.item_2 || _hrYM));
+}
+
+/* 对照：网页考勤 vs 本机记录 */
+function hrRenderCmp(d){
+  var el = $('hrCmpRows'); if (!el) return;
+  var rows = (d.kq && d.kq.rows) || [];
+  var gz = (d.gz && d.gz.gz_result) || null;
+  var app = calcMonth(_hrYM);
+  var w = {normal:0, wd:0, we:0, hol:0, leave:0, absentDays:0};
+  for (var i=0;i<rows.length;i++){
+    var r = rows[i];
+    w.normal += hrNum(r.calc_field1);
+    w.wd     += hrNum(r.calc_field3);
+    w.we     += hrNum(r.calc_field5);
+    w.hol    += hrNum(r.calc_field8);
+    w.leave  += hrNum(r.calc_field19) + hrNum(r.calc_field20) + hrNum(r.calc_field21)
+              + hrNum(r.calc_field23) + hrNum(r.calc_field24) + hrNum(r.calc_field25)
+              + hrNum(r.calc_field26) + hrNum(r.calc_field27) + hrNum(r.calc_field28);
+    if (hrNum(r.calc_field19) >= 8) w.absentDays++;
+  }
+  var html = '';
+  html += '<div style="padding:6px 2px;font-size:12px;color:var(--ink3);">左=网页考勤　右=本机记录（差额 = 本机 − 网页）</div>';
+  var pairs = [
+    ['正班工时', w.normal, app.sum.normal],
+    ['平时加班', w.wd,     app.sum.wd],
+    ['周休加班', w.we,     app.sum.we],
+    ['法定加班', w.hol,    app.sum.hol]
+  ];
+  for (var p=0;p<pairs.length;p++){
+    var a = pairs[p][1], b = pairs[p][2];
+    var diff = Math.round((b - a) * 100) / 100;
+    var cls = (Math.abs(diff) < 0.005) ? 'green' : 'red';
+    html += hrRow(pairs[p][0] + '（' + hrH(a) + ' / ' + hrH(b) + '）',
+                  (diff > 0 ? '+' : '') + hrH(diff) + ' h', cls);
+  }
+  if (w.leave) html += hrRow('网页请假/异常工时', hrH(w.leave) + ' h');
+  if (gz){
+    var gzWd = hrNum(gz.item_66), gzWe = hrNum(gz.item_67), gzNor = hrNum(gz.item_65);
+    if (gzNor) html += hrRow('网页工资条正班合计', hrH(gzNor) + ' h', Math.abs(gzNor - w.normal) < 0.005 ? 'green' : '');
+    if (gzWd)  html += hrRow('网页工资条 H1（平时加班）', hrH(gzWd) + ' h', Math.abs(gzWd - w.wd) < 0.005 ? 'green' : '');
+    if (gzWe)  html += hrRow('网页工资条 H2（周休加班）', hrH(gzWe) + ' h', Math.abs(gzWe - w.we) < 0.005 ? 'green' : '');
+    html += hrRow('网页工资条 实发工资', hrM(gz.item_145));
+    html += hrRow('本机估算 实发（总收入）', fmtMoney(app.total));
+    var dgap = Math.round((app.total - hrNum(gz.item_145)) * 100) / 100;
+    html += hrRow('差额（本机 − 网页实发）', (dgap > 0 ? '+' : '') + hrH(dgap) + ' 元',
+                  Math.abs(dgap) < 0.005 ? 'green' : 'red');
+  }
+  el.innerHTML = html;
+  var hint = $('hrCmpHint');
+  if (hint){
+    var mm = '';
+    if (rows.length){
+      var act = String(rows[0].id_date || '').slice(0, 7);
+      if (act && act !== _hrYM) mm = '<br><b style="color:var(--danger);">⚠ 网页考勤实际是 ' + esc(act)
+        + ' 月，与你要看的 ' + esc(_hrYM) + ' 月不一致，上面的差额无意义。</b>';
+    }
+    hint.innerHTML = '本机记录条数：' + app.recCount + ' 条。'
+      + '注意：网页「平时加班」与工资条 H1 是两种统计口径，数值可能不同；'
+      + '请假（如事假）在网页上不计入正班工时。' + mm;
+  }
+}
+
+function hrRenderDays(d){
+  var el = $('hrDayRows'); if (!el) return;
+  var rows = (d.kq && d.kq.rows) || [];
+  if (!rows.length){ el.innerHTML = hrRow('--', '无数据'); return; }
+  var cards = {};
+  var crows = (d.card && d.card.rows) || [];
+  for (var i=0;i<crows.length;i++){ cards[crows[i].kq_date] = crows[i]; }
+  var html = '<div style="padding:4px 2px;">';
+  for (var j=0;j<rows.length;j++){
+    var r = rows[j];
+    var nz = [];
+    for (var k=0;k<HR_KQ_FIELDS.length;k++){
+      var v = hrNum(r[HR_KQ_FIELDS[k][0]]);
+      if (v) nz.push(HR_KQ_FIELDS[k][1] + ' ' + hrH(v));
+    }
+    var c = cards[r.id_date];
+    var times = [];
+    if (c){
+      for (var t=1;t<=12;t++){
+        if (c['card' + t]) times.push(String(c['card' + t]).slice(11,16) + (c['is_buka' + t] === 'Y' ? '(补)' : ''));
+      }
+    }
+    html += '<div style="padding:6px 2px;border-bottom:1px dashed var(--line);">'
+         + '<b>' + esc(r.id_date) + '</b> 周' + weekdayCn(r.id_date)
+         + '　<span style="color:var(--ink3);">' + esc(r.runs_name || '') + '</span><br>'
+         + '<span style="color:var(--ink2);">' + (times.length ? esc(times.join(' ')) : '无打卡') + '</span><br>'
+         + '<span>' + (nz.length ? esc(nz.join('　')) : '—') + '</span>'
+         + '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+/* ---------- 取数流程：登录 → 考勤 → 原始打卡 → 工资条 ---------- */
+function hrBusy(on, msg){
+  var b = $('hrFetchBtn');
+  if (b){ b.disabled = !!on; b.textContent = on ? '读取中…' : '读取HR数据'; }
+  if (msg){ var st = $('hrStatus'); if (st) st.textContent = msg; }
+}
+function hrFetch(){
+  hrInitYM();
+  var off = hrMonthOffset(_hrYM);
+  if (off > 0){ toast('不能读取未来月份'); return; }
+  if (off < -1){
+    /* 考勤接口只保留本月/上月，更早的月份取不到 —— 自动纠正到上月，避免卡住 */
+    var nd = new Date();
+    nd.setDate(1); nd.setMonth(nd.getMonth() - 1);
+    _hrYM = nd.getFullYear() + '-' + pad2(nd.getMonth() + 1);
+    hrRender();
+    toast('服务器只保留本月/上月考勤，已切到 ' + ymLabel(_hrYM));
+    off = -1;
+  }
+  var ym = _hrYM;
+  hrBusy(true, '正在登录 HR…');
+  var stamp = new Date();
+  var at = stamp.getFullYear() + '-' + pad2(stamp.getMonth()+1) + '-' + pad2(stamp.getDate())
+         + ' ' + pad2(stamp.getHours()) + ':' + pad2(stamp.getMinutes());
+  hrPost(HR_ORIGIN + '/LoginController.ashx?action=getLangList', '', 15000, function(ok0){
+    if (!ok0){ hrBusy(false, '登录前置请求失败，请检查网络'); toast('HR 不可达'); return; }
+    var body = hrForm({
+      user_id: HR_ACCT,
+      password: hrSecret(HR_PWD),
+      lang_code: '',
+      is_mobile: 'Y',
+      login_page: 'Login_Mobile.html',
+      login_by_mobile: 'Y',
+      mobile_login: 'Y',
+      login_use_ad: ''
+    });
+    hrPost(HR_ORIGIN + '/LoginController.ashx', body, 25000, function(ok, status, text){
+      var t = String(text || '').replace(/^\s+|\s+$/g, '');
+      if (t !== '1' && t.indexOf('1:') !== 0){
+        hrBusy(false, '登录失败：' + (t || ('HTTP ' + status)));
+        toast('HR 登录失败');
+        return;
+      }
+      hrBusy(true, '登录成功，正在读取考勤…');
+      var rec = { at: at, ym: ym, kq: null, card: null, gz: null, gzMsg: '' };
+
+      var kqUrl = HR_ORIGIN + '/ehr_sys/kqs/Controller/ctlKqDetail.ashx?action=detail&month=' + off;
+      hrPost(kqUrl, 'page=1&rows=60', 25000, function(ok1, s1, t1){
+        try{ var j1 = JSON.parse(t1); if (j1 && j1.rows) rec.kq = j1; }catch(e){}
+        hrBusy(true, '正在读取原始打卡…');
+        var cardUrl = HR_ORIGIN + '/ehr_sys/kqs/controller/ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=' + off;
+        hrPost(cardUrl, 'page=1&rows=60', 25000, function(ok2, s2, t2){
+          try{ var j2 = JSON.parse(t2); if (j2 && j2.rows) rec.card = j2; }catch(e){}
+          hrBusy(true, '正在读取工资条…');
+          var gzUrl = HR_ORIGIN + '/ehr_sys/gzs/Controller/ctlGzsDetailRecordMobileMon.ashx'
+                    + '?action=formatMulti&type_id=1&month=' + encodeURIComponent(ym);
+          hrPost(gzUrl, 'page=1&rows=40', 30000, function(ok3, s3, t3){
+            var msg = '';
+            try{
+              var j3 = JSON.parse(t3);
+              if (j3 && j3.gz_result) rec.gz = j3;
+              else msg = String(t3 || '').slice(0, 60);
+            }catch(e){ msg = String(t3 || '').slice(0, 60); }
+            rec.gzMsg = msg || '该月无工资条数据';
+            var cache = hrCacheGet();
+            cache[ym] = rec;
+            hrCacheSet(cache);
+            try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:ym, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
+            hrBusy(false, '');
+            hrRender();
+            var has = (rec.kq ? rec.kq.rows.length : 0);
+            toast('HR 读取完成：考勤 ' + has + ' 天' + (rec.gz ? '，工资条已取到' : '，无工资条'));
+          });
+        });
+      });
+    });
+  });
+}
+
 function boot(){
   try{
     initYM();
@@ -2510,6 +2994,11 @@ window.shiftMonth = shiftMonth;
 window.recShiftMonth = recShiftMonth;
 window.toggleCard = toggleCard;
 window.toggleAcc = toggleAcc;
+/* HR 数据对照 */
+window.hrBack = hrBack;
+window.hrFetch = hrFetch;
+window.hrShiftMonth = hrShiftMonth;
+window.hrClearCache = hrClearCache;
 window.pickType = pickType;
 window.setHours = setHours;
 window.punchChanged = punchChanged;

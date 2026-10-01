@@ -19,6 +19,7 @@ targets:
       - sdk: Foundation.framework
       - sdk: UIKit.framework
       - sdk: WebKit.framework
+      - sdk: Security.framework
     settings:
       base:
         PRODUCT_NAME: PunchCalc
