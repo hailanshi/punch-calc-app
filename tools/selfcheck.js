@@ -811,23 +811,44 @@ ok('导入的数据参与工资计算（正班 = 8+8+8）', impCalc2.sum.normal 
 ok('导入的数据带来加班工时（3+3）', impCalc2.sum.wd === 6, impCalc2.sum.wd);
 ok('导入后该月记录数正确', impCalc2.recCount === 3, impCalc2.recCount);
 
-/* ---------- 15. 公司登录（不预置账号 / 保存登录 / 退出） ---------- */
+/* ---------- 15. 公司登录（不预置账号 / 服务器验证 / 保存登录 / 退出） ---------- */
 section('15. 公司登录');
 ok('源码里不再预置账号密码', typeof S.HR_ACCT === 'undefined' && typeof S.HR_PWD === 'undefined');
 ok('源码里没有硬编码账号赋值', !/HR_ACCT\s*=\s*['"]/.test(script) && !/HR_PWD\s*=\s*['"]/.test(script));
 ok('登录用的是可编辑输入框而非固定值',
-  /user_id:\s*_hrAcct/.test(script) && /hrSecret\(_hrPwd\)/.test(script));
+  /user_id:\s*user/.test(script) && /hrSecret\(pass\)/.test(script));
 ok('账号存储键已定义', S.LS_HRACCT === 'punchSalaryHrAcct_v1');
+ok('认证走 hrAuth / hrEnsureAuth 两个入口',
+  typeof S.hrAuth === 'function' && typeof S.hrEnsureAuth === 'function');
+
+/* 造一个假的公司服务器：loginReply 控制登录成败，便于测「登录失败必须留在登录页」 */
+let loginReply = '1';
+let failCount = 0;
+const realHrPost = S.hrPost;
+S.hrPost = function (url, body, tms, cb) {
+  if (url.indexOf('action=getLangList') >= 0) { cb(true, 200, '{}'); return; }
+  if (url.indexOf('LoginController.ashx') >= 0) {
+    if (loginReply === '1') { cb(true, 200, '1'); return; }
+    failCount++;
+    cb(true, 200, loginReply);
+    return;
+  }
+  cb(false, 0, '');
+};
+const flush = () => { for (let i = 0; i < 12; i++) { /* hrPost 桩是同步回调，无需等待 */ } };
+
 /* 未登录时 hrFetch 应被拦住，不发请求 */
-S._hrAcct = ''; S._hrPwd = ''; S._hrLoggedIn = false;
+S._hrAcct = ''; S._hrPwd = ''; S._hrLoggedIn = false; S._hrSessionOk = false;
 let fetchBlocked = false;
-const origPost = S.hrPost;
-S.hrPost = () => { fetchBlocked = true; };
+const probePost = S.hrPost;
+S.hrPost = (u, b, t, cb) => { fetchBlocked = true; };
 S.hrFetch();
-S.hrPost = origPost;
+S.hrPost = probePost;
 ok('未登录时 hrFetch 不发请求', fetchBlocked === false);
 ok('未登录时提示去登录', stub('hrLoginHint').textContent.indexOf('请先输入账号') >= 0, stub('hrLoginHint').textContent);
-/* 登录：输入为空要拦住 */
+ok('未登录时不显示数据页', stub('hrDataWrap').style.display === 'none', stub('hrDataWrap').style.display);
+
+/* 输入为空要拦住 */
 S.hrClearAcct();
 stub('hrUser').value = ''; stub('hrPass').value = '';
 S.hrLogin();
@@ -836,26 +857,46 @@ ok('账号为空时给出提示', stub('hrLoginHint').textContent.indexOf('请�
 stub('hrUser').value = 'u1'; stub('hrPass').value = '';
 S.hrLogin();
 ok('密码为空时拒绝登录', S._hrLoggedIn === false && stub('hrLoginHint').textContent.indexOf('请输入密码') >= 0);
-/* 正常登录：不勾保存 -> 不留密码 */
+
+/* ★ 关键回归：服务器说密码错 -> 必须留在登录页，不能进数据页 */
+loginReply = '对不起,您输入的密码不正确';
+S._hrSessionOk = false; S._hrLoggedIn = false;
+stub('hrUser').value = 'testuser'; stub('hrPass').value = 'wrongpass';
+stub('hrRemember').checked = false;
+S.hrLogin();
+ok('登录失败时留在登录页（不显示数据页）',
+  S._hrLoggedIn === false && stub('hrDataWrap').style.display === 'none', S._hrLoggedIn + '/' + stub('hrDataWrap').style.display);
+ok('登录失败时登录卡可见', stub('hrLoginCard').style.display !== 'none', stub('hrLoginCard').style.display);
+ok('登录失败时给出服务器原因', stub('hrLoginHint').innerHTML.indexOf('密码不正确') >= 0, stub('hrLoginHint').innerHTML);
+ok('登录失败时不置会话有效', S._hrSessionOk === false);
+ok('登录失败时清掉运行期凭据', S._hrAcct === '' && S._hrPwd === '', S._hrAcct + '/' + S._hrPwd);
+ok('登录失败不落盘错误密码', !S.storeGet(S.LS_HRACCT, null));
+ok('登录失败可重新登录（输入框仍可编辑）', stub('hrUser').value === 'testuser');
+
+/* 登录成功才进数据页 */
+loginReply = '1';
 stub('hrUser').value = 'testuser'; stub('hrPass').value = 'testpass'; stub('hrRemember').checked = false;
 S.hrLogin();
 ok('登录成功后进入数据页', S._hrLoggedIn === true && stub('hrDataWrap').style.display !== 'none', S._hrLoggedIn);
+ok('登录成功后隐藏登录卡', stub('hrLoginCard').style.display === 'none', stub('hrLoginCard').style.display);
+ok('登录成功后置会话有效', S._hrSessionOk === true);
 ok('未勾选保存时不落盘账号', !S.storeGet(S.LS_HRACCT, null), JSON.stringify(S.storeGet(S.LS_HRACCT, null)));
-/* 勾选保存 -> 落盘，且下次预填、但「不自动登录」 */
+/* 勾选保存 -> 落盘 */
 stub('hrUser').value = 'testuser'; stub('hrPass').value = 'testpass'; stub('hrRemember').checked = true;
 S.hrLogin();
 const loginSaved = S.storeGet(S.LS_HRACCT, null);
 ok('勾选保存后账号落盘', loginSaved && loginSaved.u === 'testuser' && loginSaved.p === 'testpass', JSON.stringify(loginSaved));
-S._hrLoggedIn = false; S._hrAcct = ''; S._hrPwd = '';
+S._hrLoggedIn = false; S._hrAcct = ''; S._hrPwd = ''; S._hrSessionOk = false;
 stub('hrUser').value = ''; stub('hrPass').value = ''; stub('hrRemember').checked = false;
 S.hrLoadAcct();
 ok('重新打开时预填账号', stub('hrUser').value === 'testuser', stub('hrUser').value);
 ok('重新打开时预填密码', stub('hrPass').value === 'testpass', stub('hrPass').value);
 ok('重新打开时勾选保存', stub('hrRemember').checked === true);
 ok('预填不等于自动登录', S._hrLoggedIn === false, S._hrLoggedIn);
+ok('预填不等于会话有效', S._hrSessionOk === false, S._hrSessionOk);
 ok('预填后提示可点登录', stub('hrLoginHint').innerHTML.indexOf('已保存登录') >= 0);
 /* 退出：回到登录页 */
-S._hrLoggedIn = true; S._hrAcct = 'testuser'; S._hrPwd = 'testpass';
+S._hrLoggedIn = true; S._hrSessionOk = true; S._hrAcct = 'testuser'; S._hrPwd = 'testpass';
 S.hrLogout();
 ok('退出后回到登录页', S._hrLoggedIn === false && stub('hrLoginCard').style.display !== 'none');
 ok('退出后清空运行期凭据', S._hrAcct === '' && S._hrPwd === '', S._hrAcct + '/' + S._hrPwd);

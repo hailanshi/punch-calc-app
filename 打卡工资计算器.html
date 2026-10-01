@@ -2650,7 +2650,8 @@ var LS_HRACCT  = 'punchSalaryHrAcct_v1';   /* 账号密码只存本机，由用�
 /* 运行期凭据：由登录页输入或从本机存储读入，源码里不预置任何账号 */
 var _hrAcct = '';
 var _hrPwd  = '';
-var _hrLoggedIn = false;                   /* 本次会话是否已登录过公司系统 */
+var _hrLoggedIn = false;                   /* 界面是否已进入数据页（仅登录成功后才为真） */
+var _hrSessionOk = false;                  /* 本次会话是否已通过服务器认证（cookie 有效） */
 var _hrSavedChecked = false;               /* 读一次「保存登录」勾选状态，避免反复弹确认 */
 
 /* ---------- 账号存储 ----------
@@ -2701,34 +2702,52 @@ function hrShowData(){
   if (a) a.style.display = 'none';
   if (b) b.style.display = '';
 }
-/* 「登录」：校验输入 → 按勾选决定是否保存 → 进入数据页 */
+/* 「登录」：校验输入 → 真的向服务器登录一次，**成功后才进数据页**。
+ * 以前是「有输入就直接切到数据页」，服务器说密码不对时人已经进了数据页、
+ * 登录框被隐藏，没法重登 —— 现在一律以服务器返回为准。 */
 function hrLogin(){
   var user = ($('hrUser') && $('hrUser').value || '').replace(/^\s+|\s+$/g, '');
   var pass = ($('hrPass') && $('hrPass').value) || '';
   var rem  = !!($('hrRemember') && $('hrRemember').checked);
   var h = $('hrLoginHint');
+  var btn = $('hrLoginBtn');
   if (!user){ if (h) h.textContent = '请输入账号'; return; }
   if (!pass){ if (h) h.textContent = '请输入密码'; return; }
-  _hrAcct = user;
-  _hrPwd  = pass;
-  if (rem){
-    storeSet(LS_HRACCT, { u: user, p: pass });
-    _hrSavedChecked = true;
-    if (h) h.textContent = '已保存到本机，下次不用再输。';
-  } else {
-    hrClearAcct();
-    if (h) h.textContent = '未保存（下次需要重新输入）。';
-  }
-  /* 先置登录态再切页：hrRender 见到未登录会把页面切回登录卡，
-   * 之前漏了这一步，导致登录后界面又弹回登录页。 */
-  _hrLoggedIn = true;
-  hrShowData();
-  hrRender();
-  hrFetch();
+  if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
+  if (h) h.textContent = '正在登录…';
+
+  hrAuth(user, pass, function(ok, msg){
+    if (btn){ btn.disabled = false; btn.textContent = '登录'; }
+    if (!ok){
+      /* 登录失败：留在登录页、清掉不可用的运行期凭据与已存账号，让人重新输 */
+      _hrSessionOk = false;
+      _hrLoggedIn  = false;
+      _hrAcct = ''; _hrPwd = '';
+      hrClearAcct();                       /* 存错的密码不要留着 */
+      hrShowLogin();
+      if (h) h.innerHTML = '<b style="color:var(--danger);">登录失败：' + esc(msg || '账号或密码不正确') + '</b>';
+      toast('登录失败，请重新输入');
+      return;
+    }
+    /* 登录成功：这次会话有效 */
+    _hrSessionOk = true;
+    _hrAcct = user; _hrPwd = pass;
+    if (rem){
+      storeSet(LS_HRACCT, { u: user, p: pass });
+      _hrSavedChecked = true;
+    } else {
+      hrClearAcct();       /* 没勾保存：把之前可能存过的也清掉，避免留旧密码 */
+    }
+    _hrLoggedIn = true;
+    hrShowData();
+    hrRender();
+    hrFetch();
+  });
 }
 /* 退出：运行期凭据一律清空；若本机保存过账号，只把输入框预填回去（不自动登录） */
 function hrLogout(){
   _hrLoggedIn = false;
+  _hrSessionOk = false;
   _hrAcct = ''; _hrPwd = '';       /* 运行期凭据必须清掉 */
   hrShowLogin();
   hrResetLoginFields();
@@ -3342,36 +3361,15 @@ function hrBuildImport(d, dates){
   return {recs: out, skipped: skipped};
 }
 
-/* ---------- 取数流程：登录 → 工资条（任意月份） + 考勤/打卡（仅本月上月） ---------- */
-function hrBusy(on, msg){
-  var b = $('hrFetchBtn');
-  if (b){ b.disabled = !!on; b.textContent = on ? '读取中…' : '读取HR数据'; }
-  if (msg){ var st = $('hrStatus'); if (st) st.textContent = msg; }
-}
-function hrFetch(){
-  hrInitYM();
-  /* 必须先登录：不再使用源码里预置的账号 */
-  if (!_hrAcct || !_hrPwd){
-    hrShowLogin();
-    var h0 = $('hrLoginHint');
-    if (h0) h0.textContent = '请先输入账号和密码登录';
-    toast('请先登录公司系统');
-    return;
-  }
-  var off = hrMonthOffset(_hrYM);
-  if (off > 0){ toast('不能读取未来月份'); return; }
-  /* 不再因为「考勤越界」就把月份强推到上月 —— 工资条任意月份都能查，
-   * 越界只是没有考勤/打卡，工资条照样要取。 */
-  var ym = _hrYM;
-  hrBusy(true, '正在登录 HR…');
-  var stamp = new Date();
-  var at = stamp.getFullYear() + '-' + pad2(stamp.getMonth()+1) + '-' + pad2(stamp.getDate())
-         + ' ' + pad2(stamp.getHours()) + ':' + pad2(stamp.getMinutes());
+/* ---------- 认证：唯一的登录入口，成功后 cookie 会留在会话里 ----------
+ * cb(ok, msg)：ok=true 时 msg 为空；ok=false 时 msg 是服务器给的失败原因。 */
+function hrAuth(user, pass, cb){
+  cb = cb || function(){};
   hrPost(HR_ORIGIN + '/LoginController.ashx?action=getLangList', '', 15000, function(ok0){
-    if (!ok0){ hrBusy(false, '登录前置请求失败，请检查网络'); toast('HR 不可达'); return; }
+    if (!ok0){ cb(false, '公司系统连不上，请检查网络'); return; }
     var body = hrForm({
-      user_id: _hrAcct,
-      password: hrSecret(_hrPwd),
+      user_id: user,
+      password: hrSecret(pass),
       lang_code: '',
       is_mobile: 'Y',
       login_page: 'Login_Mobile.html',
@@ -3381,92 +3379,139 @@ function hrFetch(){
     });
     hrPost(HR_ORIGIN + '/LoginController.ashx', body, 25000, function(ok, status, text){
       var t = String(text || '').replace(/^\s+|\s+$/g, '');
-      if (t !== '1' && t.indexOf('1:') !== 0){
-        hrBusy(false, '登录失败：' + (t || ('HTTP ' + status)));
-        toast('HR 登录失败');
+      if (t === '1' || t.indexOf('1:') === 0){ cb(true, ''); return; }
+      cb(false, t || ('HTTP ' + status));
+    });
+  });
+}
+/* 确认已登录：本会话验证过就直接放行，否则再向服务器验证一次。
+ * 验证失败一律回到登录页要人重登，绝不放行到数据页。 */
+function hrEnsureAuth(cb){
+  cb = cb || function(){};
+  if (_hrSessionOk && _hrAcct && _hrPwd){ cb(true); return; }
+  if (!_hrAcct || !_hrPwd){
+    _hrLoggedIn = false;
+    hrShowLogin();
+    var h = $('hrLoginHint');
+    if (h) h.textContent = '请先输入账号和密码登录';
+    if (cb(false) !== undefined) return; else return;
+  }
+  hrAuth(_hrAcct, _hrPwd, function(ok, msg){
+    if (ok){ _hrSessionOk = true; cb(true); return; }
+    _hrSessionOk = false;
+    _hrLoggedIn = false;
+    hrShowLogin();
+    var h2 = $('hrLoginHint');
+    if (h2) h2.innerHTML = '<b style="color:var(--danger);">登录失败：' + esc(msg || '账号或密码不正确') + '</b>';
+    toast('登录失败，请重新输入');
+    cb(false);
+  });
+}
+
+/* ---------- 取数流程：认证 → 工资条（任意月份） + 考勤/打卡（仅本月上月） ---------- */
+function hrBusy(on, msg){
+  var b = $('hrFetchBtn');
+  if (b){ b.disabled = !!on; b.textContent = on ? '读取中…' : '读取HR数据'; }
+  if (msg){ var st = $('hrStatus'); if (st) st.textContent = msg; }
+}
+function hrFetch(){
+  hrInitYM();
+  var off = hrMonthOffset(_hrYM);
+  if (off > 0){ toast('不能读取未来月份'); return; }
+  /* 不再因为「考勤越界」就把月份强推到上月 —— 工资条任意月份都能查，
+   * 越界只是没有考勤/打卡，工资条照样要取。 */
+  var ym = _hrYM;
+  hrBusy(true, '正在登录 HR…');
+  var stamp = new Date();
+  var at = stamp.getFullYear() + '-' + pad2(stamp.getMonth()+1) + '-' + pad2(stamp.getDate())
+         + ' ' + pad2(stamp.getHours()) + ':' + pad2(stamp.getMinutes());
+  hrEnsureAuth(function(okAuth){
+    if (!okAuth){ hrBusy(false, '未登录'); return; }
+    hrFetchData(ym, off, at);
+  });
+}
+
+/* 认证通过后的实际取数。
+ * 两个接口月份范围不同，必须分开处理：
+ *   工资条：可查任意月份（2026-07 起有数据，更早返回「只允许查询2026-07及之后月份」；
+ *           当月未结算返回「还未计算工资」）
+ *   考勤 / 原始打卡：只有本月(month=0)和上月(month=-1)，更早一律回落到上月
+ * 所以工资条永远要查；考勤/打卡只在范围内才查，越界就跳过、界面上标注。 */
+function hrFetchData(ym, off, at){
+  var rec = { at: at, ym: ym, kq: null, card: null, gz: null, gzMsg: '', attOut: false };
+  var inRange = (off === 0 || off === -1);
+  if (!inRange) rec.attOut = true;
+
+  var gzUrl = HR_ORIGIN + '/ehr_sys/gzs/Controller/ctlGzsDetailRecordMobileMon.ashx'
+            + '?action=formatMulti&type_id=1&month=' + encodeURIComponent(ym);
+
+  var afterFetch = function(){
+    var cache = hrCacheGet();
+    cache[ym] = rec;
+    /* 只有「工资条也没取到、但服务端回落到别的月份」时才对齐月份，
+     * 免得把用户主动查询的月份（如 8 月）改掉 —— 8 月本来就该停在 8 月。 */
+    var gzYM = (rec.gz && rec.gz.gz_result) ? String(rec.gz.gz_result.item_2 || '').slice(0, 7) : '';
+    if (!rec.gz && inRange){
+      var dr = hrMonthRange(((rec.kq && rec.kq.rows) || []).map(function(x){ return x.id_date; }));
+      var actualYM = dr.to || '';
+      if (actualYM && actualYM !== ym){
+        cache[actualYM] = rec;
+        hrCacheSet(cache);
+        hrGotoYM(actualYM);
+        hrBusy(false, '');
+        hrRender();
+        toast('服务器返回的是 ' + ymLabel(actualYM) + '，已切到该月');
         return;
       }
-      /* ===== 两个接口月份范围不同，必须分开处理 =====
-       *   工资条：可查任意月份（实测 2026-07 起有数据，更早会返回
-       *           「只允许查询2026-07及之后月份」；当月未结算会返回「还未计算工资」）
-       *   考勤 / 原始打卡：只有本月(month=0)和上月(month=-1)，更早一律回落到上月
-       * 所以工资条永远要查；考勤/打卡只在范围内才查，越界就跳过、界面上标注。 */
-      var rec = { at: at, ym: ym, kq: null, card: null, gz: null, gzMsg: '', attOut: false };
-      var inRange = (off === 0 || off === -1);
-      if (!inRange) rec.attOut = true;
-
-      var gzUrl = HR_ORIGIN + '/ehr_sys/gzs/Controller/ctlGzsDetailRecordMobileMon.ashx'
-                + '?action=formatMulti&type_id=1&month=' + encodeURIComponent(ym);
-
-      var afterFetch = function(){
-        var cache = hrCacheGet();
-        cache[ym] = rec;
-        /* 只有「工资条也没取到、但服务端回落到别的月份」时才对齐月份，
-         * 免得把用户主动查询的月份（如 8 月）改掉 —— 8 月本来就该停在 8 月。 */
-        var gzYM = (rec.gz && rec.gz.gz_result) ? String(rec.gz.gz_result.item_2 || '').slice(0, 7) : '';
-        if (!rec.gz && inRange){
-          var dr = hrMonthRange(((rec.kq && rec.kq.rows) || []).map(function(x){ return x.id_date; }));
-          var actualYM = dr.to || '';
-          if (actualYM && actualYM !== ym){
-            cache[actualYM] = rec;
-            hrCacheSet(cache);
-            hrGotoYM(actualYM);
-            hrBusy(false, '');
-            hrRender();
-            toast('服务器返回的是 ' + ymLabel(actualYM) + '，已切到该月');
-            return;
-          }
-        }
-        hrCacheSet(cache);
-        _hrLoggedIn = true;
-        hrBusy(false, '');
-        /* 从记录页点「从HR导入打卡」进来的：若本月没有可导入的打卡
-         * （当月常常只有 1 天、甚至一条卡都没打），自动再取上月一次，
-         * 免得用户看到「0 天可导入」还得自己切月份。 */
-        if (_hrWantImport){
-          var hasImp = false;
-          var crowsX = (rec.card && rec.card.rows) || [];
-          for (var ci=0; ci<crowsX.length; ci++){ if (hrDayHours(crowsX[ci]) > 0){ hasImp = true; break; } }
-          if (!hasImp && off === 0 && !_hrTriedPrev){
-            _hrTriedPrev = true;          /* 只回退一次，避免来回请求 */
-            _hrWantImport = true;
-            toast(ymLabel(ym) + ' 没有可导入的打卡，正在取上月…');
-            var nd2 = new Date(); nd2.setDate(1); nd2.setMonth(nd2.getMonth() - 1);
-            hrGotoYM(nd2.getFullYear() + '-' + pad2(nd2.getMonth() + 1));
-            hrRender();
-            hrFetch();
-            return;
-          }
-          _hrWantImport = false;
-        }
+    }
+    hrCacheSet(cache);
+    _hrLoggedIn = true;
+    hrBusy(false, '');
+    /* 从记录页点「从HR导入打卡」进来的：若本月没有可导入的打卡
+     * （当月常常只有 1 天、甚至一条卡都没打），自动再取上月一次，
+     * 免得用户看到「0 天可导入」还得自己切月份。 */
+    if (_hrWantImport){
+      var hasImp = false;
+      var crowsX = (rec.card && rec.card.rows) || [];
+      for (var ci=0; ci<crowsX.length; ci++){ if (hrDayHours(crowsX[ci]) > 0){ hasImp = true; break; } }
+      if (!hasImp && off === 0 && !_hrTriedPrev){
+        _hrTriedPrev = true;          /* 只回退一次，避免来回请求 */
+        _hrWantImport = true;
+        toast(ymLabel(ym) + ' 没有可导入的打卡，正在取上月…');
+        var nd2 = new Date(); nd2.setDate(1); nd2.setMonth(nd2.getMonth() - 1);
+        hrGotoYM(nd2.getFullYear() + '-' + pad2(nd2.getMonth() + 1));
         hrRender();
-        hrAfterToast(rec, ym);
-      };
+        hrFetch();
+        return;
+      }
+      _hrWantImport = false;
+    }
+    hrRender();
+    hrAfterToast(rec, ym);
+  };
 
-      /* 工资条：始终请求，失败信息照样记下来给人看 */
-      hrBusy(true, '正在读取工资条…');
-      hrPost(gzUrl, 'page=1&rows=40', 30000, function(ok3, s3, t3){
-        try{
-          var j3 = JSON.parse(t3);
-          if (j3 && j3.gz_result) rec.gz = j3;
-          else rec.gzMsg = String(t3 || '').slice(0, 80);
-        }catch(e){ rec.gzMsg = String(t3 || '').slice(0, 80); }
-        if (!inRange){
-          /* 越界月份没有考勤/打卡可查，取完工资条即可收工 */
-          rec.gzMsg = rec.gzMsg || '该月无工资条数据';
-          afterFetch();
-          return;
-        }
-        hrBusy(true, '正在读取考勤与打卡…');
-        var kqUrl = HR_ORIGIN + '/ehr_sys/kqs/Controller/ctlKqDetail.ashx?action=detail&month=' + off;
-        hrPost(kqUrl, 'page=1&rows=60', 25000, function(ok1, s1, t1){
-          try{ var j1 = JSON.parse(t1); if (j1 && j1.rows) rec.kq = j1; }catch(e){}
-          var cardUrl = HR_ORIGIN + '/ehr_sys/kqs/controller/ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=' + off;
-          hrPost(cardUrl, 'page=1&rows=60', 25000, function(ok2, s2, t2){
-            try{ var j2 = JSON.parse(t2); if (j2 && j2.rows) rec.card = j2; }catch(e){}
-            afterFetch();
-          });
-        });
+  /* 工资条：始终请求，失败信息照样记下来给人看 */
+  hrBusy(true, '正在读取工资条…');
+  hrPost(gzUrl, 'page=1&rows=40', 30000, function(ok3, s3, t3){
+    try{
+      var j3 = JSON.parse(t3);
+      if (j3 && j3.gz_result) rec.gz = j3;
+      else rec.gzMsg = String(t3 || '').slice(0, 80);
+    }catch(e){ rec.gzMsg = String(t3 || '').slice(0, 80); }
+    if (!inRange){
+      /* 越界月份没有考勤/打卡可查，取完工资条即可收工 */
+      rec.gzMsg = rec.gzMsg || '该月无工资条数据';
+      afterFetch();
+      return;
+    }
+    hrBusy(true, '正在读取考勤与打卡…');
+    var kqUrl = HR_ORIGIN + '/ehr_sys/kqs/Controller/ctlKqDetail.ashx?action=detail&month=' + off;
+    hrPost(kqUrl, 'page=1&rows=60', 25000, function(ok1, s1, t1){
+      try{ var j1 = JSON.parse(t1); if (j1 && j1.rows) rec.kq = j1; }catch(e){}
+      var cardUrl = HR_ORIGIN + '/ehr_sys/kqs/controller/ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=' + off;
+      hrPost(cardUrl, 'page=1&rows=60', 25000, function(ok2, s2, t2){
+        try{ var j2 = JSON.parse(t2); if (j2 && j2.rows) rec.card = j2; }catch(e){}
+        afterFetch();
       });
     });
   });
