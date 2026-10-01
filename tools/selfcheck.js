@@ -496,6 +496,40 @@ ok('加班到 20:00 → 加班 2h', S.hrDayPunch({ card1: '2026-08-03 08:20', ca
 ok('hrDayHours 无卡返回 0', S.hrDayHours({}) === 0);
 ok('hrDayHours 脏数据（单段超 16h）不计入',
   S.hrDayHours({ card1: '2026-08-01 00:00', card2: '2026-08-02 20:00' }) === 0);
+/* 只有一条卡（漏打下班卡）不能丢整天：补正常下班 21:00，标记 partial */
+const oneCard = S.hrDayPunch({ card1: '2026-08-03 08:20' }, '2026-08-03');
+ok('只有一条卡时识别为缺卡 partial', oneCard.partial === true && oneCard.punched === 1, JSON.stringify(oneCard));
+ok('只有一条卡仍算出整天 11h（正班 8 + 加班 3）',
+  S.hrDayHours({ card1: '2026-08-03 08:20' }) === 11, S.hrDayHours({ card1: '2026-08-03 08:20' }));
+/* 三条卡（漏了最后一次）同样补齐 */
+const threeCard = S.hrDayPunch({
+  card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50'
+}, '2026-08-03');
+ok('三条卡也按 partial 处理并按 21:00 补齐', threeCard.partial === true && threeCard.normal + threeCard.ot === 11,
+  threeCard.normal + '/' + threeCard.ot);
+ok('正常四条卡不算 partial',
+  S.hrDayPunch({ card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' }, '2026-08-03').partial === false);
+/* 缺卡的日期照样能导入，不会被跳过 */
+const impOne = {
+  card: { rows: [{ kq_date: '2026-08-03', card1: '2026-08-03 08:20' }] },
+  kq: { rows: [{ id_date: '2026-08-03' }] }
+};
+ok('只有一条卡的日期可以导入（不被 skipped）',
+  S.hrBuildImport(impOne, ['2026-08-03']).recs.length === 1 &&
+  S.hrBuildImport(impOne, ['2026-08-03']).skipped === 0,
+  JSON.stringify(S.hrBuildImport(impOne, ['2026-08-03'])));
+/* 只有 1 天的数据也要能导入 1 条 */
+const impSingle = {
+  card: { rows: [{ kq_date: '2026-10-06', card1: '2026-10-06 08:20', card2: '2026-10-06 11:50', card3: '2026-10-06 12:50', card4: '2026-10-06 17:20' }] },
+  kq: { rows: [{ id_date: '2026-10-06' }] }
+};
+ok('只有 1 天数据也能导入 1 条', S.hrBuildImport(impSingle, ['2026-10-06']).recs.length === 1);
+/* 完全没打卡（card 全空）才跳过 */
+const impEmpty = {
+  card: { rows: [{ kq_date: '2026-10-01', card1: '' }] },
+  kq: { rows: [{ id_date: '2026-10-01' }] }
+};
+ok('无打卡的日期才计入 skipped', S.hrBuildImport(impEmpty, ['2026-10-01']).skipped === 1);
 ok('hrDayPunch 识别休息日', S.hrDayPunch(REAL_PUNCH, '2026-09-27').rest === true);
 ok('hrDayPunch 识别工作日（含调休补班 09-20）',
   S.hrDayPunch(REAL_PUNCH, '2026-09-20').rest === false && S.classify('2026-09-20').type === 'workday');

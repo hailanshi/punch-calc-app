@@ -2912,6 +2912,7 @@ function hrRenderCmp(d){
 var HR_SHIFT_MORN = [8 * 60 + 20, 11 * 60 + 50];   /* 8:20 - 11:50 */
 var HR_SHIFT_AFT  = [12 * 60 + 50, 17 * 60 + 20];  /* 12:50 - 17:20 */
 var HR_OT_FROM    = 18 * 60;                       /* 18:00 起算加班 */
+var HR_OT_TO      = 21 * 60;                       /* 21:00 正常下班（漏卡时按此补齐） */
 var HR_SHIFT_TEXT = '8:20-11:50 / 12:50-17:20';
 
 /* 打卡时间 → 分钟数组（只取 HH:MM，忽略日期与秒） */
@@ -2933,17 +2934,25 @@ function hrOverlap(a1, a2, b1, b2){
   var lo = Math.max(a1, b1), hi = Math.min(a2, b2);
   return hi > lo ? (hi - lo) : 0;
 }
-/* 按公司口径算一天：返回 {total, normal, ot, rest}
- * total  = 打卡实际时长（成对累加，仅供参考）
- * normal = 落在正班班次内的分钟数 / 60
- * ot     = 18:00 之后的分钟数 / 60
- * rest   = 该日是否休息日（周末 / 法定 / 放假连休） */
+/* 按公司口径算一天：返回 {total, normal, ot, rest, partial, punched}
+ * total   = 打卡实际时长（成对累加，仅供参考）
+ * normal  = 落在正班班次内的分钟数 / 60
+ * ot      = 18:00 之后的分钟数 / 60
+ * rest    = 该日是否休息日（周末 / 法定 / 放假连休）
+ * punched = 有打卡时间点的个数（用于识别「只有一条卡」）
+ * partial = 打卡条数为奇数（缺一次卡），此时按正常下班算满勤，需人工确认 */
 function hrDayPunch(card, dateStr){
   var ts = hrCardMins(card);
   var total = 0, normal = 0, ot = 0;
-  for (var i=0;i+1<ts.length;i+=2){
-    var s = ts[i], e = ts[i+1];
-    if (e <= s || e - s > 16 * 60) continue;          /* 脏数据跳过 */
+  var n = ts.length;
+  /* 成对处理；末尾若剩一条（只打了上班卡或只打了下班卡），
+   * 不丢弃整天，而是补一个正常的结束时间，让这天照样能导入 —— 
+   * 用户口径是「不要计较那几分钟」，漏卡不该让一整天算不出来。 */
+  var partial = (n % 2) === 1;
+  for (var i=0;i<n;i+=2){
+    var s = ts[i];
+    var e = (i + 1 < n) ? ts[i + 1] : HR_OT_TO;        /* 补正常下班 21:00 */
+    if (e <= s || e - s > 16 * 60) continue;           /* 脏数据跳过 */
     total += (e - s);
     normal += hrOverlap(s, e, HR_SHIFT_MORN[0], HR_SHIFT_MORN[1]);
     normal += hrOverlap(s, e, HR_SHIFT_AFT[0],  HR_SHIFT_AFT[1]);
@@ -2957,7 +2966,7 @@ function hrDayPunch(card, dateStr){
   return { total: Math.round(total / 60 * 100) / 100,
            normal: Math.round(normal / 60 * 100) / 100,
            ot: Math.round(ot / 60 * 100) / 100,
-           rest: isRest };
+           rest: isRest, partial: partial, punched: n };
 }
 /* 上班总时长：正班班次内时长 + 18 点后加班，取整数小时
  * （周末上班整天即 8h + 3h = 11h，与公司口径一致） */
@@ -2996,6 +3005,7 @@ function hrRenderDays(d){
         + '加班 = 18:00 之后（正常 3h），统计取整数；迟到 / 早退才按实际扣减。<br>'
         + '勾选要导入的日期，App 会按当天日期判定工作日 / 周末 / 法定节假日并分档。'
         + '已有记录的日期需确认才会覆盖。'
+        + '<b>只有一条卡（漏打）不会丢弃整天</b>，会按 21:00 下班补齐并标红提示，可自行取消勾选。'
         + (crows.length ? '<br>可导入 ' + crows.length + ' 天原始打卡。' : '');
     }
   }
@@ -3030,6 +3040,10 @@ function hrRenderDays(d){
     var chk = canImp
       ? '<input type="checkbox" class="hrDayChk" data-date="' + esc(r.id_date) + '" checked style="width:17px;height:17px;margin-right:7px;vertical-align:-3px;">'
       : '<span style="display:inline-block;width:17px;margin-right:7px;"></span>';
+    /* 缺卡（打卡条数为奇数）会被补成正常下班，必须标出来让人确认 */
+    var pflag = (canImp && pk.partial)
+      ? '<b style="color:var(--danger);">⚠ 缺卡（只有 ' + pk.punched + ' 条，已按 21:00 下班补算）</b>'
+      : '';
     html += '<div style="padding:7px 2px;border-bottom:1px dashed var(--line);'
          + (canImp ? '' : 'opacity:.55;') + '">'
          + chk + '<b>' + esc(r.id_date) + '</b> 周' + weekdayCn(r.id_date)
@@ -3038,6 +3052,7 @@ function hrRenderDays(d){
                     + '<span style="color:var(--ink3);">（正班 ' + hrStat(pk.normal)
                     + (pk.ot > 0 ? ' + 加班 ' + hrStat(pk.ot) : '') + '）</span>' : '')
          + (bucket ? '<br><span style="margin-left:24px;color:' + bCls + ';font-weight:600;">→ ' + esc(bucket) + '</span>' : '')
+         + (pflag ? '<br><span style="margin-left:24px;">' + pflag + '</span>' : '')
          + '<br><span style="color:var(--ink2);margin-left:24px;">'
          + (ptxt ? esc(ptxt) : '无打卡') + '</span>'
          + (nz.length ? '<br><span style="margin-left:24px;">' + esc(nz.join('　')) + '</span>' : '')
