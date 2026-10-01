@@ -475,54 +475,46 @@ ok('逐日明细渲染出日期', stub('hrDayRows').innerHTML.indexOf('2026-08-0
 ok('逐日明细带导入勾选框', stub('hrDayRows').innerHTML.indexOf('hrDayChk') >= 0);
 ok('逐日明细预演归类（→ 提示）', stub('hrDayRows').innerHTML.indexOf('→') >= 0);
 
-/* 调休补班日口径不一致检测：2026-09-20 是国务院定的补班日，
- * 若工资条把它记成周休加班，必须给出告警（实测公司系统确实如此） */
-ok('2026-09-20 是国务院补班日（App 判为 workday）', S.classify('2026-09-20').type === 'workday',
-  S.classify('2026-09-20').type);
-S.storeSet('punchSalaryHrCache_v1', {
-  '2026-09': {
-    at: '2026-10-01 21:00', ym: '2026-09',
-    kq: { rows: [
-      { id_date: '2026-09-20', calc_field5: 11 },
-      { id_date: '2026-09-27', calc_field5: 11 }
-    ] },
-    card: { rows: [] },
-    gz: { gz_result: { item_61: '168.0', item_62: '2520.0', item_145: '4935.01' } },
-    gzMsg: ''
-  }
-});
-S._hrYM = '2026-09';
-S.hrRender();
-ok('检出调休补班日与工资条口径不一致', stub('hrCmpHint').innerHTML.indexOf('调休补班日口径不一致') >= 0);
-ok('告警里点出具体日期', stub('hrCmpHint').innerHTML.indexOf('2026-09-20') >= 0);
-ok('未误报 9/27（App 也算休息日）',
-  stub('hrCmpHint').innerHTML.indexOf('2026-09-27') < 0);
-
-/* 打卡时长解析：成对时间首尾相接累加（自动扣休息） */
-ok('hrDayHours 解析单段打卡',
-  S.hrDayHours({ card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }) === 9, 
-  S.hrDayHours({ card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }));
-ok('hrDayHours 三段打卡扣掉休息（真实数据 8:12~21:00）',
-  S.hrDayHours({
-    card1: '2026-09-01 08:12', card2: '2026-09-01 11:51',
-    card3: '2026-09-01 12:45', card4: '2026-09-01 17:21',
-    card5: '2026-09-01 17:55', card6: '2026-09-01 21:00'
-  }) === 11.33,
-  S.hrDayHours({
-    card1: '2026-09-01 08:12', card2: '2026-09-01 11:51',
-    card3: '2026-09-01 12:45', card4: '2026-09-01 17:21',
-    card5: '2026-09-01 17:55', card6: '2026-09-01 21:00'
-  }));
+/* 公司班次口径：正班 = 落在 8:20-11:50 / 12:50-17:20 内的时长；加班 = 18:00 后；统计取整数 */
+const REAL_PUNCH = {
+  card1: '2026-09-01 08:12', card2: '2026-09-01 11:51',
+  card3: '2026-09-01 12:45', card4: '2026-09-01 17:21',
+  card5: '2026-09-01 17:55', card6: '2026-09-01 21:00'
+};
+const rp = S.hrDayPunch(REAL_PUNCH, null);
+ok('真实打卡：正班 8h（早到/晚走不计）', rp.normal === 8, rp.normal);
+ok('真实打卡：加班 3h（18 点后，不计那几分钟）', rp.ot === 3, rp.ot);
+ok('真实打卡：合计 11h（整数）', S.hrDayHours(REAL_PUNCH) === 11, S.hrDayHours(REAL_PUNCH));
+ok('满勤 8:20-11:50 / 12:50-17:20 = 正班 8h、无加班',
+  S.hrDayHours({ card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' }) === 8);
+/* 迟到 / 早退要如实扣减（用户明确说这两种要计较） */
+const late = S.hrDayPunch({ card1: '2026-08-03 08:45', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20' }, null);
+ok('迟到 25 分钟 → 正班 7.58h（不被抹平）', Math.abs(late.normal - 7.58) < 0.005, late.normal);
+const early = S.hrDayPunch({ card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 16:00' }, null);
+ok('早退 80 分钟 → 正班 6.67h（不被抹平）', Math.abs(early.normal - 6.67) < 0.005, early.normal);
+ok('加班到 20:00 → 加班 2h', S.hrDayPunch({ card1: '2026-08-03 08:20', card2: '2026-08-03 11:50', card3: '2026-08-03 12:50', card4: '2026-08-03 17:20', card5: '2026-08-03 17:55', card6: '2026-08-03 20:00' }, null).ot === 2);
 ok('hrDayHours 无卡返回 0', S.hrDayHours({}) === 0);
 ok('hrDayHours 脏数据（单段超 16h）不计入',
   S.hrDayHours({ card1: '2026-08-01 00:00', card2: '2026-08-02 20:00' }) === 0);
+ok('hrDayPunch 识别休息日', S.hrDayPunch(REAL_PUNCH, '2026-09-27').rest === true);
+ok('hrDayPunch 识别工作日（含调休补班 09-20）',
+  S.hrDayPunch(REAL_PUNCH, '2026-09-20').rest === false && S.classify('2026-09-20').type === 'workday');
 ok('hrDayPunchText 拼出打卡时间', S.hrDayPunchText({ card1: '2026-08-01 08:12', card2: '2026-08-01 17:21' }) === '08:12 17:21');
 ok('hrDayPunchText 标注补卡', S.hrDayPunchText({ card1: '2026-08-01 08:12', is_buka1: 'Y' }) === '08:12(补)');
+/* 统计取整：整数不显示小数点，迟到才露出小数 */
+ok('hrStat 整数不带小数', S.hrStat(8) === '8');
+ok('hrStat 非整数保留两位（迟到场景）', S.hrStat(7.42) === '7.42');
+ok('hrStat 8.0 归整', S.hrStat(8.001) === '8');
 
 /* 导入：把网页打卡写进本机记录，并按日期自动拆分（用纯函数测，不依赖 DOM 勾选）
- * 用 2026-08-03（周一）而非 08-01（周六），才能验证「工作日 8h 正班 + 超出计加班」 */
+ * 用 2026-08-03（周一）而非 08-01（周六），才能验证「工作日 8h 正班 + 加班」 */
 const impD = {
-  card: { rows: [{ kq_date: '2026-08-03', card1: '2026-08-03 08:00', card2: '2026-08-03 17:00' }] },
+  card: { rows: [{
+    kq_date: '2026-08-03',
+    card1: '2026-08-03 08:20', card2: '2026-08-03 11:50',
+    card3: '2026-08-03 12:50', card4: '2026-08-03 17:20',
+    card5: '2026-08-03 17:55', card6: '2026-08-03 21:00'
+  }] },
   kq: { rows: [{ id_date: '2026-08-03', calc_field1: 8 }] }
 };
 const built = S.hrBuildImport(impD, ['2026-08-03']);
@@ -530,23 +522,32 @@ ok('hrBuildImport 产出 1 条记录', built.recs.length === 1, JSON.stringify(b
 const ir = built.recs[0] || {};
 ok('导入记录类型为上班打卡', ir.type === 'work', ir.type);
 ok('导入记录日期正确', ir.date === '2026-08-03', ir.date);
-ok('导入记录工时 = 打卡时长 9h', ir.hours === 9, ir.hours);
+ok('导入记录工时 = 正班 8 + 加班 3 = 11h（整数）', ir.hours === 11, ir.hours);
 ok('导入记录备注标明来源', String(ir.note).indexOf('HR导入') === 0, ir.note);
-ok('导入工时按日期自动拆分（工作日 8h 正班 + 1h 平日加班）', ir.n === 8 && ir.d === 1, ir.n + '/' + ir.d);
+ok('导入工时按日期自动拆分（工作日 8h 正班 + 3h 平日加班）', ir.n === 8 && ir.d === 3, ir.n + '/' + ir.d);
 /* 周六导入应全部进周末加班桶，验证日期判定真的生效 */
 const impSat = {
-  card: { rows: [{ kq_date: '2026-08-01', card1: '2026-08-01 08:00', card2: '2026-08-01 17:00' }] },
+  card: { rows: [{
+    kq_date: '2026-08-01',
+    card1: '2026-08-01 08:20', card2: '2026-08-01 11:50',
+    card3: '2026-08-01 12:50', card4: '2026-08-01 17:20',
+    card5: '2026-08-01 17:55', card6: '2026-08-01 21:00'
+  }] },
   kq: { rows: [] }
 };
 const satRec = S.hrBuildImport(impSat, ['2026-08-01']).recs[0] || {};
-ok('周六导入全计周末加班', satRec.w === 9 && satRec.n === 0, satRec.n + '/' + satRec.w);
+ok('周六导入全计周末加班 11h', satRec.w === 11 && satRec.n === 0, satRec.n + '/' + satRec.w);
 ok('hrBuildImport 对无打卡日期计入 skipped',
   S.hrBuildImport(impD, ['2026-08-02']).skipped === 1 &&
   S.hrBuildImport(impD, ['2026-08-02']).recs.length === 0);
 ok('hrBuildImport 对空入参安全', S.hrBuildImport(null, null).recs.length === 0);
 /* 事假标注：站点把事假记在 calc_field19，导入时要提示 */
 const impD2 = {
-  card: { rows: [{ kq_date: '2026-08-03', card1: '2026-08-03 08:00', card2: '2026-08-03 17:00' }] },
+  card: { rows: [{
+    kq_date: '2026-08-03',
+    card1: '2026-08-03 08:20', card2: '2026-08-03 11:50',
+    card3: '2026-08-03 12:50', card4: '2026-08-03 17:20'
+  }] },
   kq: { rows: [{ id_date: '2026-08-03', calc_field19: 8 }] }
 };
 ok('事假日期在备注里被标注',

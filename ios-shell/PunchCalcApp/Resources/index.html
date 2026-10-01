@@ -2685,7 +2685,6 @@ function hrNum(v){
 }
 function hrH(v){ return (Math.round(hrNum(v)*100)/100).toFixed(2); }
 function hrM(v){ return fmtMoney(hrNum(v)); }
-
 function hrRender(){
   hrInitYM();
   var lbl = $('hrMonthLabel'); if (lbl) lbl.textContent = ymLabel(_hrYM);
@@ -2715,7 +2714,8 @@ function hrRenderEmpty(){
   ['hrAttHint','hrPayHint','hrCmpHint','hrImpHint'].forEach(function(id){ var el = $(id); if (el) el.innerHTML = ''; });
 }
 
-/* 考勤字段 → 中文名（来自接口 format_mobile 的字段定义） */
+/* 考勤字段 → [中文名, 单位标记]（名称取自接口 format_mobile 的字段定义，勿臆测）
+ * 第三项 'm' = 分钟/次数（不加 h 后缀），其余为工时 */
 var HR_KQ_FIELDS = [
   ['calc_field1',  '正班工时'],
   ['calc_field3',  '平时加班'],
@@ -2724,9 +2724,9 @@ var HR_KQ_FIELDS = [
   ['calc_field19', '事假工时'],
   ['calc_field20', '病假工时'],
   ['calc_field21', '年假工时'],
-  ['calc_field11', '迟到分钟'],
-  ['calc_field12', '早退分钟'],
-  ['calc_field29', '签卡次数'],
+  ['calc_field11', '迟到分钟', 'm'],
+  ['calc_field12', '早退分钟', 'm'],
+  ['calc_field29', '签卡次数', 'm'],
   ['calc_field28', '无薪假工时']
 ];
 /* 工资条 item → 中文名（来自工资条接口的 gz_format.Columns） */
@@ -2767,7 +2767,8 @@ function hrRenderAtt(d){
   html += hrRow('考勤天数', rows.length + ' 天');
   for (var k=0;k<HR_KQ_FIELDS.length;k++){
     var f2 = HR_KQ_FIELDS[k][0];
-    if (sum[f2]) html += hrRow(HR_KQ_FIELDS[k][1], hrH(sum[f2]) + ' h');
+    /* 分钟类字段（迟到/早退/签卡）保留原值，工时类取整 */
+    if (sum[f2]) html += hrRow(HR_KQ_FIELDS[k][1], hrStat(sum[f2]) + (HR_KQ_FIELDS[k][2] ? '' : ' h'));
   }
   el.innerHTML = html;
   var hint = $('hrAttHint');
@@ -2862,54 +2863,83 @@ function hrRenderCmp(d){
       tips.push('工资条「应出勤工时」= ' + hrH(gz.item_61) + 'h，可到设置页「本月标准工时」手动填这个数（当前 '
         + hrH(app.stdBase) + 'h）。');
     }
-    /* 口径差异检测：调休补班日公司常按「休息日加班」计入工资条，
-     * 而 App 按国务院安排算作工作日 —— 这会直接造成加班项对不上。 */
-    var kgrows = (d.kq && d.kq.rows) || [];
-    var mismatch = [];
-    for (var z=0;z<kgrows.length;z++){
-      var rr = kgrows[z];
-      var dt = rr.id_date;
-      if (!dt) continue;
-      var dz = new Date(dt + 'T00:00:00');
-      var dow = dz.getDay();
-      if (dow !== 0 && dow !== 6) continue;              /* 只看落在周末的日期 */
-      if (classify(dt).type !== 'workday') continue;      /* 且 App 认定它是上班日（补班） */
-      if (hrNum(rr.calc_field5) > 0){
-        mismatch.push(dt + '（App 算工作日，工资条算周休加班 ' + hrH(rr.calc_field5) + 'h）');
-      }
-    }
-    if (mismatch.length){
-      tips.push('<b style="color:var(--danger);">⚠ 调休补班日口径不一致</b>：<br>'
-        + esc(mismatch.join('<br>'))
-        + '<br>按国务院放假安排这些周末是<b>上班日</b>（App 据此归到正班/平日加班），'
-        + '但公司工资条把它们算成了<b>周休加班</b>。加班项对不上是这个原因，不是算错。'
-        + '若不认可可在「节假日」页把该日改成自定义休息日。');
-    }
-    tips.push('本机记录 ' + app.recCount + ' 条。工时口径（H1/H2）只列出不比对，因为公司统计方式与 App 拆分规则不同。');
+    /* 工时口径说明：App 用的是公司班次口径，与工资条同源 */
+    tips.push('本机记录 ' + app.recCount + ' 条。工时按<b>公司班次口径</b>折算：'
+      + '正班 = 实际落在 ' + HR_SHIFT_TEXT + ' 内的时长（满勤 8h），'
+      + '加班 = 18:00 之后，均取整数；迟到 / 早退才按实际扣减。'
+      + '周六日与法定节假日上班整天计入休息日加班（约 11h）。');
     hint.innerHTML = tips.join('<br>');
   }
 }
 
-/* 从原始打卡记录算某天的实际工时：把成对的打卡时间首尾相接累加。
- * 例：08:12 11:51 / 12:45 17:21 / 17:55 21:00 → 上午段 + 下午段 + 加班段，自动扣掉休息。 */
-function hrDayHours(card){
-  if (!card) return 0;
+/* =====================================================================
+ * 公司班次口径（按你的说明实现，替代早期「精确保留分钟」的算法）
+ *   正班：8:20-11:50 + 12:50-17:20，满勤 8h —— 只算实际落在班次内的时段，
+ *         所以迟到 / 早退会被如实扣减，早到和 17:20 后的零星时间不计。
+ *   加班：18:00 之后。正常 17:55 前后下班、21:00 左右走，算 3h。
+ *   统计：一律取整数小时，不保留小数点。
+ *   例：08:12 11:51 12:45 17:21 17:55 21:00 → 正班 8h + 加班 3h（旧的精确算法给 11.33h）
+ * ===================================================================*/
+var HR_SHIFT_MORN = [8 * 60 + 20, 11 * 60 + 50];   /* 8:20 - 11:50 */
+var HR_SHIFT_AFT  = [12 * 60 + 50, 17 * 60 + 20];  /* 12:50 - 17:20 */
+var HR_OT_FROM    = 18 * 60;                       /* 18:00 起算加班 */
+var HR_SHIFT_TEXT = '8:20-11:50 / 12:50-17:20';
+
+/* 打卡时间 → 分钟数组（只取 HH:MM，忽略日期与秒） */
+function hrCardMins(card){
   var ts = [];
+  if (!card) return ts;
   for (var t=1;t<=12;t++){
     var v = card['card' + t];
     if (!v) break;                      /* 卡序是连续的，遇到空就停 */
     var m = String(v).match(/(\d{1,2}):(\d{2})/g);
     if (!m || !m.length) break;
     var last = m[m.length - 1].split(':');
-    var mins = parseInt(last[0], 10) * 60 + parseInt(last[1], 10);
-    ts.push(mins);
+    ts.push(parseInt(last[0], 10) * 60 + parseInt(last[1], 10));
   }
-  var total = 0;
+  return ts;
+}
+/* 两个区间的交集长度（分钟） */
+function hrOverlap(a1, a2, b1, b2){
+  var lo = Math.max(a1, b1), hi = Math.min(a2, b2);
+  return hi > lo ? (hi - lo) : 0;
+}
+/* 按公司口径算一天：返回 {total, normal, ot, rest}
+ * total  = 打卡实际时长（成对累加，仅供参考）
+ * normal = 落在正班班次内的分钟数 / 60
+ * ot     = 18:00 之后的分钟数 / 60
+ * rest   = 该日是否休息日（周末 / 法定 / 放假连休） */
+function hrDayPunch(card, dateStr){
+  var ts = hrCardMins(card);
+  var total = 0, normal = 0, ot = 0;
   for (var i=0;i+1<ts.length;i+=2){
-    var seg = ts[i+1] - ts[i];
-    if (seg > 0 && seg <= 16 * 60) total += seg;   /* 单段超 16h 视为脏数据 */
+    var s = ts[i], e = ts[i+1];
+    if (e <= s || e - s > 16 * 60) continue;          /* 脏数据跳过 */
+    total += (e - s);
+    normal += hrOverlap(s, e, HR_SHIFT_MORN[0], HR_SHIFT_MORN[1]);
+    normal += hrOverlap(s, e, HR_SHIFT_AFT[0],  HR_SHIFT_AFT[1]);
+    ot     += hrOverlap(s, e, HR_OT_FROM, 24 * 60);
   }
-  return Math.round((total / 60) * 100) / 100;
+  var isRest = false;
+  if (dateStr){
+    var c = classify(dateStr).type;
+    isRest = (c === 'weekend' || c === 'holiday_rest' || c === 'holiday');
+  }
+  return { total: Math.round(total / 60 * 100) / 100,
+           normal: Math.round(normal / 60 * 100) / 100,
+           ot: Math.round(ot / 60 * 100) / 100,
+           rest: isRest };
+}
+/* 上班总时长：正班班次内时长 + 18 点后加班，取整数小时
+ * （周末上班整天即 8h + 3h = 11h，与公司口径一致） */
+function hrDayHours(card){
+  var p = hrDayPunch(card, null);
+  return Math.round(p.normal + p.ot);
+}
+/* 统计一律整数显示；仅当迟到/早退导致不是整点时才露出小数后两位 */
+function hrStat(v){
+  var n = Math.round((isFinite(v) ? v : 0) * 100) / 100;
+  return (Math.abs(n - Math.round(n)) < 0.005) ? String(Math.round(n)) : n.toFixed(2);
 }
 /* 取某天的打卡时间文本，如 08:12 11:51 / 12:45 17:21 */
 function hrDayPunchText(card){
@@ -2933,8 +2963,10 @@ function hrRenderDays(d){
   if (imp){
     if (!rows.length && !crows.length){ imp.textContent = '没有取到打卡数据。'; }
     else {
-      imp.innerHTML = '勾选要导入的日期，会按当天日期自动判定工作日/周末/法定节假日并拆分工时。'
-        + '已有记录的日期需要确认才会覆盖。'
+      imp.innerHTML = '按<b>公司班次口径</b>折算：正班 = 落在 ' + HR_SHIFT_TEXT + ' 内的时长（满勤 8h），'
+        + '加班 = 18:00 之后（正常 3h），统计取整数；迟到 / 早退才按实际扣减。<br>'
+        + '勾选要导入的日期，App 会按当天日期判定工作日 / 周末 / 法定节假日并分档。'
+        + '已有记录的日期需确认才会覆盖。'
         + (crows.length ? '<br>可导入 ' + crows.length + ' 天原始打卡。' : '');
     }
   }
@@ -2943,10 +2975,11 @@ function hrRenderDays(d){
     return;
   }
   var html = '<div style="padding:4px 2px;font-size:12px;color:var(--ink3);">'
-           + '每行显示导入后会计入哪一档（App 按国务院放假安排判定，可能与公司系统口径不同）</div>';
+           + '每行显示导入后会计入哪一档</div>';
   for (var j=0;j<rows.length;j++){
     var r = rows[j];
     var c = cards[r.id_date];
+    var pk = hrDayPunch(c, r.id_date);
     var hrs = hrDayHours(c);
     var ptxt = hrDayPunchText(c);
     var nz = [];
@@ -2972,7 +3005,9 @@ function hrRenderDays(d){
          + (canImp ? '' : 'opacity:.55;') + '">'
          + chk + '<b>' + esc(r.id_date) + '</b> 周' + weekdayCn(r.id_date)
          + '　<span style="color:var(--ink3);">' + esc(r.runs_name || '') + '</span>'
-         + (canImp ? '　<b style="color:var(--main-deep);">' + hrH(hrs) + 'h</b>' : '')
+         + (canImp ? '　<b style="color:var(--main-deep);">' + hrStat(pk.normal + pk.ot) + 'h</b>'
+                    + '<span style="color:var(--ink3);">（正班 ' + hrStat(pk.normal)
+                    + (pk.ot > 0 ? ' + 加班 ' + hrStat(pk.ot) : '') + '）</span>' : '')
          + (bucket ? '<br><span style="margin-left:24px;color:' + bCls + ';font-weight:600;">→ ' + esc(bucket) + '</span>' : '')
          + '<br><span style="color:var(--ink2);margin-left:24px;">'
          + (ptxt ? esc(ptxt) : '无打卡') + '</span>'
