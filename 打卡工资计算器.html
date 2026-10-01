@@ -558,14 +558,6 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         </div>
       </div>
 
-      <div class="card collapsed" id="hrAttCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页考勤<span class="chev">▶</span></button>
-        <div class="cardBody">
-          <div class="dl" id="hrAttRows"><div><span class="k">--</span><span class="v">未读取</span></div></div>
-          <div class="hint" id="hrAttHint" style="margin-top:8px;"></div>
-        </div>
-      </div>
-
       <div class="card collapsed" id="hrPayCard">
         <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页工资条<span class="chev">▶</span></button>
         <div class="cardBody">
@@ -583,7 +575,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
 
       <div class="card collapsed" id="hrDayCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页打卡明细 / 导入<span class="chev">▶</span></button>
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页打卡 → 导入本机<span class="chev">▶</span></button>
         <div class="cardBody">
           <div class="hint" id="hrImpHint" style="margin-bottom:8px;"></div>
           <div style="display:flex;gap:8px;margin-bottom:10px;">
@@ -2706,7 +2698,6 @@ function hrRender(){
   var cache = hrCacheGet();
   var d = cache[_hrYM];
   if (!d){ hrRenderEmpty(); return; }
-  hrRenderAtt(d);
   hrRenderPay(d);
   hrRenderCmp(d);
   hrRenderDays(d);
@@ -2715,29 +2706,14 @@ function hrRender(){
 }
 
 function hrRenderEmpty(){
-  ['hrAttRows','hrPayRows','hrCmpRows','hrDayRows'].forEach(function(id){
+  ['hrPayRows','hrCmpRows','hrDayRows'].forEach(function(id){
     var el = $(id); if (el) el.innerHTML = hrRow('--', '该月未读取');
   });
   var st = $('hrStatus');
   if (st) st.textContent = ymLabel(_hrYM) + ' 尚未读取。点「读取HR数据」登录公司 HR 取数。';
-  ['hrAttHint','hrPayHint','hrCmpHint','hrImpHint'].forEach(function(id){ var el = $(id); if (el) el.innerHTML = ''; });
+  ['hrPayHint','hrCmpHint','hrImpHint'].forEach(function(id){ var el = $(id); if (el) el.innerHTML = ''; });
 }
 
-/* 考勤字段 → [中文名, 单位标记]（名称取自接口 format_mobile 的字段定义，勿臆测）
- * 第三项 'm' = 分钟/次数（不加 h 后缀），其余为工时 */
-var HR_KQ_FIELDS = [
-  ['calc_field1',  '正班工时'],
-  ['calc_field3',  '平时加班'],
-  ['calc_field5',  '周休加班'],
-  ['calc_field8',  '法定加班'],
-  ['calc_field19', '事假工时'],
-  ['calc_field20', '病假工时'],
-  ['calc_field21', '年假工时'],
-  ['calc_field11', '迟到分钟', 'm'],
-  ['calc_field12', '早退分钟', 'm'],
-  ['calc_field29', '签卡次数', 'm'],
-  ['calc_field28', '无薪假工时']
-];
 /* 工资条 item → 中文名（来自工资条接口的 gz_format.Columns） */
 var HR_GZ_FIELDS = [
   ['item_61',  '应出勤工时'],
@@ -2759,46 +2735,6 @@ var HR_GZ_FIELDS = [
   ['item_134', '个人社保'],
   ['item_145', '实发工资']
 ];
-
-function hrRenderAtt(d){
-  var el = $('hrAttRows'); if (!el) return;
-  var rows = (d.kq && d.kq.rows) || [];
-  if (!rows.length){ el.innerHTML = hrRow('考勤', '无数据'); return; }
-  var sum = {};
-  for (var i=0;i<rows.length;i++){
-    for (var j=0;j<HR_KQ_FIELDS.length;j++){
-      var f = HR_KQ_FIELDS[j][0];
-      var v = hrNum(rows[i][f]);
-      if (v) sum[f] = (sum[f] || 0) + v;
-    }
-  }
-  var html = '';
-  html += hrRow('考勤天数', rows.length + ' 天');
-  for (var k=0;k<HR_KQ_FIELDS.length;k++){
-    var f2 = HR_KQ_FIELDS[k][0];
-    /* 分钟类字段（迟到/早退/签卡）保留原值，工时类取整 */
-    if (sum[f2]) html += hrRow(HR_KQ_FIELDS[k][1], hrStat(sum[f2]) + (HR_KQ_FIELDS[k][2] ? '' : ' h'));
-  }
-  el.innerHTML = html;
-  var hint = $('hrAttHint');
-  if (hint){
-    var d1 = rows[0].id_date || '';
-    var d2 = rows[rows.length - 1].id_date || '';
-    var actual = d1.slice(0, 7);
-    var extra = [];
-    if (d.card && d.card.rows) extra.push('原始打卡 ' + d.card.rows.length + ' 天');
-    var warn = '';
-    /* 考勤接口只有「本月 / 上月」两档，请求更早月份会被服务端回落到上月，
-     * 这时实际区间会和你要查看的月份不一致 —— 必须显式警告，否则对照会算错。 */
-    if (actual && actual !== _hrYM){
-      warn = '<br><b style="color:var(--danger);">⚠ 服务器实际返回的是 ' + esc(actual)
-           + ' 的数据，不是你要看的 ' + esc(_hrYM) + '。考勤接口只保留本月/上月，'
-           + '跨月对照工资条会得出错误差额，请自行核对月份。</b>';
-    }
-    hint.innerHTML = '数据区间 ' + esc(d1) + ' ~ ' + esc(d2)
-      + (extra.length ? '（' + esc(extra.join('，')) + '）' : '') + warn;
-  }
-}
 
 function hrRenderPay(d){
   var el = $('hrPayRows'); if (!el) return;
@@ -3062,11 +2998,12 @@ function hrRenderDays(d){
     var pk = hrDayPunch(c, r.id_date);
     var hrs = hrDayHours(c);
     var ptxt = hrDayPunchText(c);
-    var nz = [];
-    for (var k=0;k<HR_KQ_FIELDS.length;k++){
-      var v = hrNum(r[HR_KQ_FIELDS[k][0]]);
-      if (v) nz.push(HR_KQ_FIELDS[k][1] + ' ' + hrH(v));
-    }
+    /* 站点把请假记在 calc_field19/20/21 等字段里，只用来提示请假情况，
+     * 不参与任何计算（用户只要工资条对照，不要考勤口径）。 */
+    var lv = hrNum(r.calc_field19) + hrNum(r.calc_field20) + hrNum(r.calc_field21)
+           + hrNum(r.calc_field23) + hrNum(r.calc_field24) + hrNum(r.calc_field25)
+           + hrNum(r.calc_field26) + hrNum(r.calc_field27) + hrNum(r.calc_field28);
+    var leaveTag = lv > 0 ? ('站点记为请假 ' + hrStat(lv) + 'h' + (hrs <= 0 ? '（无打卡，不导入）' : '')) : '';
     /* 无打卡的日期（如事假/缺勤）不可导入 */
     var canImp = hrs > 0;
     /* 预演导入后的归类，让用户能提前看出与工资条的差异 */
@@ -3094,9 +3031,9 @@ function hrRenderDays(d){
                     + (pk.ot > 0 ? ' + 加班 ' + hrStat(pk.ot) : '') + '）</span>' : '')
          + (bucket ? '<br><span style="margin-left:24px;color:' + bCls + ';font-weight:600;">→ ' + esc(bucket) + '</span>' : '')
          + (pflag ? '<br><span style="margin-left:24px;">' + pflag + '</span>' : '')
+         + (leaveTag ? '<br><span style="margin-left:24px;color:var(--danger);">' + leaveTag + '</span>' : '')
          + '<br><span style="color:var(--ink2);margin-left:24px;">'
          + (ptxt ? esc(ptxt) : '无打卡') + '</span>'
-         + (nz.length ? '<br><span style="margin-left:24px;">' + esc(nz.join('　')) + '</span>' : '')
          + '</div>';
   }
   html += '</div>';

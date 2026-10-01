@@ -424,8 +424,8 @@ ok('保存后 otMode 保持', S.otModeOf(saved) === 'rate', saved.otMode);
 ok('std 兜底值仍在（非 NaN）', isFinite(saved.std) && saved.std > 0, saved.std);
 ok('底薪按月落库', parseFloat(S.getBaseMap()['2026-10']) === 2800, JSON.stringify(S.getBaseMap()));
 
-/* ---------- 10. HR 数据对照 ---------- */
-section('10. HR 数据对照');
+/* ---------- 10. HR 工资条对照 ---------- */
+section('10. HR 工资条对照');
 /* 密码算法：必须与真实抓包值逐字节一致（这是最容易写错的一处） */
 ok('hrSecret 是函数', typeof S.hrSecret === 'function');
 if (typeof S.hrSecret === 'function') {
@@ -433,17 +433,15 @@ if (typeof S.hrSecret === 'function') {
     S.hrSecret('testpw') === '200203218205221224222231204205', S.hrSecret('testpw'));
   ok('hrSecret 长度随密码增长', S.hrSecret('12345678').length > S.hrSecret('123456').length);
 }
-ok('HR 考勤字段映射有正班/平时加班/周休加班',
-  S.HR_KQ_FIELDS.some(f => f[0] === 'calc_field1') &&
-  S.HR_KQ_FIELDS.some(f => f[0] === 'calc_field3') &&
-  S.HR_KQ_FIELDS.some(f => f[0] === 'calc_field5'));
+/* 只做工资条对照，不应再有任何考勤汇总 UI */
+ok('已移除考勤汇总字段表 HR_KQ_FIELDS', typeof S.HR_KQ_FIELDS === 'undefined');
+ok('HR 页不再有考勤卡片', html.indexOf('id="hrAttCard"') < 0 && html.indexOf('id="hrAttRows"') < 0);
+ok('HR 页不再有考勤渲染函数', script.indexOf('function hrRenderAtt') < 0);
 ok('HR 工资条映射有应出勤/H1/H2/实发',
   S.HR_GZ_FIELDS.some(f => f[0] === 'item_61') &&
   S.HR_GZ_FIELDS.some(f => f[0] === 'item_66') &&
   S.HR_GZ_FIELDS.some(f => f[0] === 'item_67') &&
   S.HR_GZ_FIELDS.some(f => f[0] === 'item_145'));
-ok('考勤字段名取自接口定义（中文非空）',
-  S.HR_KQ_FIELDS.every(f => typeof f[1] === 'string' && f[1].length > 0));
 /* 缓存读写 + 渲染不抛异常 */
 S.storeSet('punchSalaryHrCache_v1', {});
 ok('HR 缓存初始为空', Object.keys(S.hrCacheGet()).length === 0);
@@ -463,8 +461,6 @@ try {
   S.hrRender();
 } catch (e) { hrErr = e.message; }
 ok('hrRender 不抛异常', hrErr === '', hrErr);
-ok('考勤卡片渲染出正班工时', stub('hrAttRows').innerHTML.indexOf('正班工时') >= 0);
-ok('考勤卡片渲染出平时加班', stub('hrAttRows').innerHTML.indexOf('平时加班') >= 0);
 ok('工资条卡片渲染出实发工资', stub('hrPayRows').innerHTML.indexOf('实发工资') >= 0);
 ok('工资条金额带 ¥ 符号', stub('hrPayRows').innerHTML.indexOf('¥4935.01') >= 0);
 /* 对照：只比工资条，不再比考勤 */
@@ -703,14 +699,14 @@ ok('导入的打卡记录参与工资计算（正班工时 > 0）', impCalc.sum.
 ok('导入后该月记录数正确', impCalc.recCount === 2, impCalc.recCount);
 
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
-ok('跨月时给出告警文案', script.indexOf('服务器实际返回的是') >= 0 && script.indexOf('不一致') >= 0);
+ok('跨月时给出告警文案', script.indexOf('月份对不上，已隐藏金额差额') >= 0 && script.indexOf('无法对照') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));
 ok('HR 内联 handler 都已挂 window',
   ['hrBack', 'hrFetch', 'hrShiftMonth', 'hrClearCache', 'hrSelAll', 'hrImport']
     .every(f => script.indexOf('window.' + f + ' = ' + f) >= 0));
 ok('HR 页 DOM id 齐备',
-  ['page-hr', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrAttRows', 'hrAttHint',
-   'hrPayRows', 'hrPayHint', 'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount', 'hrHomeHint']
+  ['page-hr', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrPayRows', 'hrPayHint',
+   'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount', 'hrHomeHint']
     .every(id => html.indexOf('id="' + id + '"') >= 0));
 
 console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败');

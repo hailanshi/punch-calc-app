@@ -15,13 +15,15 @@ iPhone Safari 打开后「添加到主屏幕」即作为 PWA 使用；`ios-shell
 ## HR工资条对照 / 导入打卡（v2.1）
 
 「首页 → 📊 HR工资条对照 / 导入打卡」进入。点「读取HR数据」自动登录并取数，结果缓存在本机供离线对照。
+页面只有三块：**网页工资条**（原始项）、**工资条对照**（vs 本机计算）、**网页打卡 → 导入本机**。
+**不做考勤对照** —— 日考勤接口只用来标注「站点记为请假 N h」，不参与任何计算。
 
 | 取数项 | 接口 | 说明 |
 | --- | --- | --- |
 | 登录 | `POST /LoginController.ashx` | 密码经站点 `Set_Secret` 混淆后提交 |
-| 日考勤 | `ctlKqDetail.ashx?action=detail&month=N` | 正班 / 平时加班 / 周休加班 / 各类请假；用于明细展示 |
+| 工资条 | `ctlGzsDetailRecordMobileMon.ashx?action=formatMulti&type_id=1&month=YYYY-MM` | 应出勤 / H1 / H2 / 应发 / 实发等；**对照的唯一依据** |
 | 原始打卡 | `ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=N` | card1~card12，`is_bukaN=Y` 表示补卡；**导入的数据源** |
-| 工资条 | `ctlGzsDetailRecordMobileMon.ashx?action=formatMulti&type_id=1&month=YYYY-MM` | 应出勤 / H1 / H2 / 应发 / 实发等 |
+| 日考勤 | `ctlKqDetail.ashx?action=detail&month=N` | 仅取 `calc_field19/20/21…` 判断是否请假，在明细里标注，**不参与计算** |
 
 ### 打卡导入规则（公司班次口径）
 工时**不按打卡分钟精确累加**，而是按公司班次口径折算，**统计一律取整数**：
@@ -67,10 +69,10 @@ iPhone Safari 打开后「添加到主屏幕」即作为 PWA 使用；`ios-shell
 ### 已知口径与限制（重要）
 - **考勤 / 打卡接口只有「本月 / 上月」两档**：`month=0` 是本月的第 1 天，任何非 0 值都返回上月，
   更早的月份取不到。跨月时页面会**红色告警**提示月份不一致。
-- **考勤字段口径**（取自接口 `format_mobile` 的字段定义，勿臆测）：
-  `calc_field1`=正班_工时、`calc_field3`=平时_加班、`calc_field5`=周休_加班、`calc_field8`=法定_加班、
-  `calc_field19`=**事假_工时**、`calc_field20`=病假、`calc_field21`=年假、`calc_field11/12`=迟到/早退分钟。
-  实测 2026-08：正班 136h + 事假 32h = 168h = 工资条「应出勤工时」，口径自洽。
+- **日考勤字段只用于标注请假**（取自接口 `format_mobile` 的字段定义，勿臆测）：
+  `calc_field19`=**事假_工时**、`calc_field20`=病假、`calc_field21`=年假 等。
+  这些值**不参与工时或工资计算**，只在导入明细里显示「站点记为请假 N h（无打卡，不导入）」，
+  提醒你这天在站点上算请假而不是出勤。App 不对照考勤汇总。
 - **对照前建议先对齐参数**：工资条「基本工资」是当月底薪，本机底薪需按月锁定（设置页保存时写入当月）；
   「应出勤工时」可手动填到「本月标准工时」。未对齐时对照页会给出红色提示。
 - **工时口径（H1/H2）只列出不比对**，因为公司统计方式（按整点）与 App（按实际分钟）不同。
