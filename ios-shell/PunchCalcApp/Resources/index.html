@@ -591,7 +591,8 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <div style="font-size:13px;color:var(--ink2);">
           <b>数据来源</b>：公司 EHR（hr.voopootech.net）。工资条 = 个人工资查询，打卡 = 原始打卡记录。<br>
           只做<b>读取</b>，不会改动服务器任何数据。取到的数据缓存在本机，供离线对照。<br>
-          <b>注意</b>：打卡数据服务器只保留<b>本月和上月</b>，更早的月份取不到。
+          <b>月份范围不同（重要）</b>：<b>工资条可查任意月份</b>（本账号 2026-07 起有数据，当月未结算会提示）；
+          <b>考勤 / 打卡只有本月和上月</b>，查更早的月份会被服务端回落到上月，所以那几个月没有打卡可导入。
         </div>
         <div class="hint" id="hrAccount" style="margin-top:8px;"></div>
       </div>
@@ -2772,13 +2773,15 @@ function hrRenderCmp(d){
     return;
   }
   var S = getSet();
-  /* 先算月份是否对得上：工资条月份 ≠ 正在看的月份时，整份对照都没有意义
-   * （8 月和 9 月的正班/H1/H2 是两套数字，混着比一定错），
-   * 这时只列工资条原始项，不显示任何金额差额。 */
+  /* 只有「工资条月份 ≠ 正在看的月份」才必须拦掉 —— 那才是两套数字（8月 vs 9月）相减。
+   * 打卡/考勤没有数据不算错：考勤只有本月上月，查 7/8 月时天然没有，
+   * 这种情况照常做工资条对照，只在下面说明一句。 */
   var arows0 = (d.kq && d.kq.rows) || [];
   var acFrom0 = hrMonthRange(arows0.map(function(x){ return x.id_date; }));
   var gzYM0 = String(gz.item_2 || '').slice(0, 7);
-  var mmMismatch = (gzYM0 && gzYM0 !== _hrYM) || (acFrom0.from && acFrom0.from !== _hrYM);
+  var attMissing = !acFrom0.from;                       /* 该月没有考勤/打卡数据（越界） */
+  var mmMismatch = (gzYM0 && gzYM0 !== _hrYM)
+                || (acFrom0.from && acFrom0.from !== _hrYM && !attMissing);
   var html = '';
   if (mmMismatch){
     html += '<div style="padding:8px 2px;font-size:13px;color:var(--danger);font-weight:600;">'
@@ -2837,10 +2840,15 @@ function hrRenderCmp(d){
     var arows = (d.kq && d.kq.rows) || [];
     var acFrom = hrMonthRange(arows.map(function(x){ return x.id_date; }));
     var gzYM = String(gz.item_2 || '').slice(0, 7);
-    /* 走到这里说明月份已经对得上（对不上时上面已提前返回） */
+    /* 走到这里说明工资条月份与查看月份一致（不一致时上面已提前返回） */
     tips.push('同月对照：本机记录月 <b>' + esc(_hrYM) + '</b>'
-      + '　｜　网页打卡 <b>' + esc(acFrom.from || '—') + '</b>'
-      + (gzYM ? '　｜　工资条 <b>' + esc(gzYM) + '</b>' : ''));
+      + '　｜　工资条 <b>' + esc(gzYM || _hrYM) + '</b>'
+      + (acFrom.from ? '　｜　网页打卡 <b>' + esc(acFrom.from) + '</b>' : ''));
+    if (!acFrom.from){
+      tips.push('该月<b>没有考勤 / 打卡数据</b>：考勤接口只保留本月和上月，'
+        + '工资条却能查更早的月份。所以这个月只能对工资条金额，'
+        + '工时项由本机记录（或你手工补录的打分）决定。');
+    }
     /* 本机要算得准，这两个参数必须和工资条对齐，否则差额没有意义 */
     if (!app.baseIsLocked){
       tips.push('<b style="color:var(--danger);">本月底薪未按月锁定</b>（当前用 '
@@ -2972,7 +2980,12 @@ function hrRenderDays(d){
   for (var i=0;i<crows.length;i++){ cards[crows[i].kq_date] = crows[i]; }
   var imp = $('hrImpHint');
   if (imp){
-    if (!rows.length && !crows.length){ imp.textContent = '没有取到打卡数据。'; }
+    if (d.attOut){
+      imp.innerHTML = '<b>' + esc(_hrYM) + ' 没有打卡数据可导入</b>：'
+        + '原始打卡接口只保留<b>本月和上月</b>，更早的月份取不到（工资条不受此限制，任意月份都能查）。'
+        + '要导入打卡，请把月份切到本月或上月。';
+    }
+    else if (!rows.length && !crows.length){ imp.textContent = '没有取到打卡数据。'; }
     else {
       /* 预览：这个月哪些日子会因为没有记录而被算成缺勤（会清零全勤奖） */
       var haveRec = {};
@@ -3167,7 +3180,7 @@ function hrBuildImport(d, dates){
   return {recs: out, skipped: skipped};
 }
 
-/* ---------- 取数流程：登录 → 考勤 → 原始打卡 → 工资条 ---------- */
+/* ---------- 取数流程：登录 → 工资条（任意月份） + 考勤/打卡（仅本月上月） ---------- */
 function hrBusy(on, msg){
   var b = $('hrFetchBtn');
   if (b){ b.disabled = !!on; b.textContent = on ? '读取中…' : '读取HR数据'; }
@@ -3177,15 +3190,8 @@ function hrFetch(){
   hrInitYM();
   var off = hrMonthOffset(_hrYM);
   if (off > 0){ toast('不能读取未来月份'); return; }
-  if (off < -1){
-    /* 考勤接口只保留本月/上月，更早的月份取不到 —— 自动纠正到上月，避免卡住 */
-    var nd = new Date();
-    nd.setDate(1); nd.setMonth(nd.getMonth() - 1);
-    _hrYM = nd.getFullYear() + '-' + pad2(nd.getMonth() + 1);
-    hrRender();
-    toast('服务器只保留本月/上月考勤，已切到 ' + ymLabel(_hrYM));
-    off = -1;
-  }
+  /* 不再因为「考勤越界」就把月份强推到上月 —— 工资条任意月份都能查，
+   * 越界只是没有考勤/打卡，工资条照样要取。 */
   var ym = _hrYM;
   hrBusy(true, '正在登录 HR…');
   var stamp = new Date();
@@ -3210,57 +3216,80 @@ function hrFetch(){
         toast('HR 登录失败');
         return;
       }
-      hrBusy(true, '登录成功，正在读取考勤…');
-      var rec = { at: at, ym: ym, kq: null, card: null, gz: null, gzMsg: '' };
+      /* ===== 两个接口月份范围不同，必须分开处理 =====
+       *   工资条：可查任意月份（实测 2026-07 起有数据，更早会返回
+       *           「只允许查询2026-07及之后月份」；当月未结算会返回「还未计算工资」）
+       *   考勤 / 原始打卡：只有本月(month=0)和上月(month=-1)，更早一律回落到上月
+       * 所以工资条永远要查；考勤/打卡只在范围内才查，越界就跳过、界面上标注。 */
+      var rec = { at: at, ym: ym, kq: null, card: null, gz: null, gzMsg: '', attOut: false };
+      var inRange = (off === 0 || off === -1);
+      if (!inRange) rec.attOut = true;
 
-      var kqUrl = HR_ORIGIN + '/ehr_sys/kqs/Controller/ctlKqDetail.ashx?action=detail&month=' + off;
-      hrPost(kqUrl, 'page=1&rows=60', 25000, function(ok1, s1, t1){
-        try{ var j1 = JSON.parse(t1); if (j1 && j1.rows) rec.kq = j1; }catch(e){}
-        hrBusy(true, '正在读取原始打卡…');
-        var cardUrl = HR_ORIGIN + '/ehr_sys/kqs/controller/ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=' + off;
-        hrPost(cardUrl, 'page=1&rows=60', 25000, function(ok2, s2, t2){
-          try{ var j2 = JSON.parse(t2); if (j2 && j2.rows) rec.card = j2; }catch(e){}
-          hrBusy(true, '正在读取工资条…');
-          var gzUrl = HR_ORIGIN + '/ehr_sys/gzs/Controller/ctlGzsDetailRecordMobileMon.ashx'
-                    + '?action=formatMulti&type_id=1&month=' + encodeURIComponent(ym);
-          hrPost(gzUrl, 'page=1&rows=40', 30000, function(ok3, s3, t3){
-            var msg = '';
-            try{
-              var j3 = JSON.parse(t3);
-              if (j3 && j3.gz_result) rec.gz = j3;
-              else msg = String(t3 || '').slice(0, 60);
-            }catch(e){ msg = String(t3 || '').slice(0, 60); }
-            rec.gzMsg = msg || '该月无工资条数据';
-            var cache = hrCacheGet();
-            cache[ym] = rec;
-            /* 服务端只保留本月/上月：请求更早的月份时会回落到上月。
-             * 若回来的数据不是我们要的月份，就以数据为准把月份对齐，
-             * 免得「HR 页显示 9 月、记录页还在 10 月」，导入落到错月份。 */
-            var dr = hrMonthRange(((rec.kq && rec.kq.rows) || []).map(function(x){ return x.id_date; }));
-            var actualYM = dr.to || '';
-            if (actualYM && actualYM !== ym){
-              cache[actualYM] = rec;          /* 也存一份到它真实所属的月份 */
-              hrCacheSet(cache);
-              hrGotoYM(actualYM);
-              try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:actualYM, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
-              hrBusy(false, '');
-              hrRender();
-              var hn2 = (rec.kq ? rec.kq.rows.length : 0);
-              toast('服务器只保留本月/上月，返回的是 ' + ymLabel(actualYM)
-                    + '（打卡 ' + hn2 + ' 天），已切到该月');
-              return;
-            }
+      var gzUrl = HR_ORIGIN + '/ehr_sys/gzs/Controller/ctlGzsDetailRecordMobileMon.ashx'
+                + '?action=formatMulti&type_id=1&month=' + encodeURIComponent(ym);
+
+      var afterFetch = function(){
+        var cache = hrCacheGet();
+        cache[ym] = rec;
+        /* 只有「工资条也没取到、但服务端回落到别的月份」时才对齐月份，
+         * 免得把用户主动查询的月份（如 8 月）改掉 —— 8 月本来就该停在 8 月。 */
+        var gzYM = (rec.gz && rec.gz.gz_result) ? String(rec.gz.gz_result.item_2 || '').slice(0, 7) : '';
+        if (!rec.gz && inRange){
+          var dr = hrMonthRange(((rec.kq && rec.kq.rows) || []).map(function(x){ return x.id_date; }));
+          var actualYM = dr.to || '';
+          if (actualYM && actualYM !== ym){
+            cache[actualYM] = rec;
             hrCacheSet(cache);
-            try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:ym, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
+            hrGotoYM(actualYM);
             hrBusy(false, '');
             hrRender();
-            var has = (rec.kq ? rec.kq.rows.length : 0);
-            toast('HR 读取完成：考勤 ' + has + ' 天' + (rec.gz ? '，工资条已取到' : '，无工资条'));
+            toast('服务器返回的是 ' + ymLabel(actualYM) + '，已切到该月');
+            return;
+          }
+        }
+        hrCacheSet(cache);
+        try{ localStorage.setItem('punchSalaryHrLast_v1', JSON.stringify({ym:ym, acct:HR_ACCT, pwd:HR_PWD})); }catch(e){}
+        hrBusy(false, '');
+        hrRender();
+        hrAfterToast(rec, ym);
+      };
+
+      /* 工资条：始终请求，失败信息照样记下来给人看 */
+      hrBusy(true, '正在读取工资条…');
+      hrPost(gzUrl, 'page=1&rows=40', 30000, function(ok3, s3, t3){
+        try{
+          var j3 = JSON.parse(t3);
+          if (j3 && j3.gz_result) rec.gz = j3;
+          else rec.gzMsg = String(t3 || '').slice(0, 80);
+        }catch(e){ rec.gzMsg = String(t3 || '').slice(0, 80); }
+        if (!inRange){
+          /* 越界月份没有考勤/打卡可查，取完工资条即可收工 */
+          rec.gzMsg = rec.gzMsg || '该月无工资条数据';
+          afterFetch();
+          return;
+        }
+        hrBusy(true, '正在读取考勤与打卡…');
+        var kqUrl = HR_ORIGIN + '/ehr_sys/kqs/Controller/ctlKqDetail.ashx?action=detail&month=' + off;
+        hrPost(kqUrl, 'page=1&rows=60', 25000, function(ok1, s1, t1){
+          try{ var j1 = JSON.parse(t1); if (j1 && j1.rows) rec.kq = j1; }catch(e){}
+          var cardUrl = HR_ORIGIN + '/ehr_sys/kqs/controller/ctlKqsOriginCardRecord.ashx?action=retrieveMas&month=' + off;
+          hrPost(cardUrl, 'page=1&rows=60', 25000, function(ok2, s2, t2){
+            try{ var j2 = JSON.parse(t2); if (j2 && j2.rows) rec.card = j2; }catch(e){}
+            afterFetch();
           });
         });
       });
     });
   });
+}
+
+/* 取数完成后的提示：把「工资条」「考勤/打卡」两个来源分别说清楚 */
+function hrAfterToast(rec, ym){
+  var gzTxt = rec.gz ? '工资条已取到' : ('无工资条（' + (rec.gzMsg || '未返回') + '）');
+  var attTxt;
+  if (rec.attOut) attTxt = '考勤/打卡越界未查（只有本月/上月）';
+  else attTxt = '打卡 ' + ((rec.card && rec.card.rows) ? rec.card.rows.length : 0) + ' 天';
+  toast(ymLabel(ym) + '：' + gzTxt + '；' + attTxt);
 }
 
 function boot(){
