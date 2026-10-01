@@ -2830,7 +2830,36 @@ function hrRenderCmp(d){
     return;
   }
   var S = getSet();
+  /* 先算月份是否对得上：工资条月份 ≠ 正在看的月份时，整份对照都没有意义
+   * （8 月和 9 月的正班/H1/H2 是两套数字，混着比一定错），
+   * 这时只列工资条原始项，不显示任何金额差额。 */
+  var arows0 = (d.kq && d.kq.rows) || [];
+  var acFrom0 = hrMonthRange(arows0.map(function(x){ return x.id_date; }));
+  var gzYM0 = String(gz.item_2 || '').slice(0, 7);
+  var mmMismatch = (gzYM0 && gzYM0 !== _hrYM) || (acFrom0.from && acFrom0.from !== _hrYM);
   var html = '';
+  if (mmMismatch){
+    html += '<div style="padding:8px 2px;font-size:13px;color:var(--danger);font-weight:600;">'
+         + '⚠ 月份对不上，已隐藏金额差额</div>';
+    html += hrRow('本机 / 考勤查看的月份', _hrYM);
+    if (acFrom0.from) html += hrRow('网页打卡实际月份', acFrom0.from + (acFrom0.to !== acFrom0.from ? ' ~ ' + acFrom0.to : ''));
+    if (gzYM0) html += hrRow('工资条所属月份', gzYM0);
+    html += '<div style="padding:8px 2px;font-size:12px;color:var(--ink3);">'
+         + '不同月份的正班合计 / H1 / H2、底薪都是两套数字，直接相减没有意义。'
+         + '考勤接口只保留本月和上月，工资条可以查更早的月份 —— '
+         + '两边取不到同一个月时无法对照。</div>';
+    /* 只把工资条原始项列出来供人工查看，不做任何相减 */
+    for (var q0=0;q0<HR_GZ_FIELDS.length;q0++){
+      var f0 = HR_GZ_FIELDS[q0][0], v0 = gz[f0];
+      if (v0 === undefined || v0 === null || v0 === '') continue;
+      var isMoney0 = /工资|津贴|奖金|补贴|餐补|社保/.test(HR_GZ_FIELDS[q0][1]);
+      html += hrRow('工资条 · ' + HR_GZ_FIELDS[q0][1], isMoney0 ? hrM(v0) : esc(String(v0)));
+    }
+    el.innerHTML = html;
+    if (hint) hint.innerHTML = '把 HR 页切到 <b>' + esc(gzYM0 || acFrom0.from || '') + '</b> 月'
+      + '再点「读取HR数据」，才能做同月对照（考勤只有本月/上月可取）。';
+    return;
+  }
   html += '<div style="padding:6px 2px;font-size:12px;color:var(--ink3);">左=网页工资条　右=本机计算（差额 = 本机 − 网页）</div>';
   /* 逐项对照：网页工资条项 vs 本机算出来的同名项 */
   var pairs = [
@@ -2866,22 +2895,10 @@ function hrRenderCmp(d){
     var arows = (d.kq && d.kq.rows) || [];
     var acFrom = hrMonthRange(arows.map(function(x){ return x.id_date; }));
     var gzYM = String(gz.item_2 || '').slice(0, 7);
-    var mline = '本机记录月：<b>' + esc(_hrYM) + '</b>'
-      + '　｜　网页打卡：<b>' + esc(acFrom.from || '—')
-      + (acFrom.to && acFrom.to !== acFrom.from ? ' ~ ' + esc(acFrom.to) : '') + '</b>'
-      + (gzYM ? '　｜　工资条：<b>' + esc(gzYM) + '</b>' : '');
-    if (acFrom.from && acFrom.from !== _hrYM){
-      mline += '<br><b style="color:var(--danger);">⚠ 网页数据是 ' + esc(acFrom.from)
-        + '，不是你要看的 ' + esc(_hrYM) + ' —— 考勤接口只保留本月 / 上月，'
-        + '更早的月份服务端会回落到上月。</b> '
-        + '<a href="javascript:void(0)" onclick="window.hrGotoYM(\'' + esc(acFrom.to || acFrom.from)
-        + '\')" style="color:var(--main-deep);font-weight:700;">切到 ' + esc(acFrom.to || acFrom.from) + '</a>';
-    }
-    if (gzYM && gzYM !== _hrYM){
-      mline += '<br>工资条是 ' + esc(gzYM) + ' 月的，与当前查看的 ' + esc(_hrYM) + ' 月不同，'
-        + '下面的差额不是同一个月对比。';
-    }
-    tips.push(mline);
+    /* 走到这里说明月份已经对得上（对不上时上面已提前返回） */
+    tips.push('同月对照：本机记录月 <b>' + esc(_hrYM) + '</b>'
+      + '　｜　网页打卡 <b>' + esc(acFrom.from || '—') + '</b>'
+      + (gzYM ? '　｜　工资条 <b>' + esc(gzYM) + '</b>' : ''));
     /* 本机要算得准，这两个参数必须和工资条对齐，否则差额没有意义 */
     if (!app.baseIsLocked){
       tips.push('<b style="color:var(--danger);">本月底薪未按月锁定</b>（当前用 '

@@ -551,6 +551,46 @@ ok('导入提示带缺勤预警', impHintTxt.indexOf('算<b>缺勤</b>') >= 0 ||
 ok('导入提示给出可导入天数（只算有空卡的）',
   impHintTxt.indexOf('本次可导入 <b>1</b> 天') >= 0, impHintTxt.slice(0, 300));
 ok('导入提示说明全勤奖会清零', impHintTxt.indexOf('全勤奖') >= 0);
+
+/* ---------- 12. 跨月对照必须被拦掉 ---------- */
+section('12. 跨月对照拦截（8月工资条 ≠ 9月考勤）');
+/* 工资条月初与查看月份不同 → 不给任何金额差额 */
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-09': {
+    at: '2026-10-01 22:30', ym: '2026-09',
+    kq: { rows: [{ id_date: '2026-09-01', calc_field1: 8, calc_field3: 3 }] },
+    card: { rows: [] },
+    gz: { gz_result: { item_2: '2026-08', item_61: '168.0', item_65: '168.0',
+                       item_66: '60.0', item_67: '22.0', item_71: '2520.0',
+                       item_118: '5355.69', item_145: '4935.01' } },
+    gzMsg: ''
+  }
+});
+S._hrYM = '2026-09'; S._curYM = '2026-09';
+S.hrRender();
+const cmpHtml = stub('hrCmpRows').innerHTML;
+ok('跨月时给出拦截提示', cmpHtml.indexOf('月份对不上') >= 0, cmpHtml.slice(0, 200));
+ok('跨月时列出工资条所属月份', cmpHtml.indexOf('工资条所属月份') >= 0);
+ok('跨月时列出打卡实际月份', cmpHtml.indexOf('网页打卡实际月份') >= 0);
+ok('跨月时不显示「本机计算」差额列', cmpHtml.indexOf('本机计算') < 0);
+ok('跨月时不显示差额数字', cmpHtml.indexOf('实发工资（') < 0, cmpHtml.slice(0, 300));
+ok('跨月时仍可看到工资条原始项', cmpHtml.indexOf('工资条 · 实发工资') >= 0);
+ok('跨月提示指引切到工资条月份', stub('hrCmpHint').innerHTML.indexOf('2026-08') >= 0);
+/* 同月时恢复正常对照 */
+S.storeSet('punchSalaryHrCache_v1', {
+  '2026-08': {
+    at: '2026-10-01 22:31', ym: '2026-08',
+    kq: { rows: [{ id_date: '2026-08-03', calc_field1: 8, calc_field3: 3 }] },
+    card: { rows: [] },
+    gz: { gz_result: { item_2: '2026-08', item_71: '2520.0', item_145: '4935.01' } },
+    gzMsg: ''
+  }
+});
+S._hrYM = '2026-08'; S._curYM = '2026-08';
+S.hrRender();
+const cmpHtml2 = stub('hrCmpRows').innerHTML;
+ok('同月时恢复「本机计算」对照', cmpHtml2.indexOf('本机计算') >= 0);
+ok('同月时不再报月份不一致', cmpHtml2.indexOf('月份对不上') < 0);
 ok('hrDayPunch 识别休息日', S.hrDayPunch(REAL_PUNCH, '2026-09-27').rest === true);
 ok('hrDayPunch 识别工作日（含调休补班 09-20）',
   S.hrDayPunch(REAL_PUNCH, '2026-09-20').rest === false && S.classify('2026-09-20').type === 'workday');
