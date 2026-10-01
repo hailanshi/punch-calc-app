@@ -1,4 +1,4 @@
-/* 打卡工资计算器 · 自检（静态检查 + 逻辑自检）
+﻿/* 打卡工资计算器 · 自检（静态检查 + 逻辑自检）
  *
  * 用法（在仓库根目录）:
  *     node tools/selfcheck.js 打卡工资计算器.html
@@ -390,17 +390,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4','g5'].filter(g => head
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.1', S.APP_VER === '2.1', S.APP_VER);
-ok('title 带 v2.1', /<title>[^<]*v2\.1[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.1', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.1</string>') >= 0);
+ok('APP_VER = 2.2', S.APP_VER === '2.2', S.APP_VER);
+ok('title 带 v2.2', /<title>[^<]*v2\.2[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.2', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.2</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：底薪', stub('sumBase').textContent.indexOf('底薪') >= 0, stub('sumBase').textContent);
 ok('折叠标题摘要：加班方式', stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.1') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.2') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });
@@ -429,7 +429,7 @@ section('10. HR 工资条对照');
 /* 密码算法：必须与真实抓包值逐字节一致（这是最容易写错的一处） */
 ok('hrSecret 是函数', typeof S.hrSecret === 'function');
 if (typeof S.hrSecret === 'function') {
-  ok("hrSecret('testpw') 与真实请求一致",
+  ok("hrSecret('testpw') 与抓包算法一致",
     S.hrSecret('testpw') === '200203218205221224222231204205', S.hrSecret('testpw'));
   ok('hrSecret 长度随密码增长', S.hrSecret('12345678').length > S.hrSecret('123456').length);
 }
