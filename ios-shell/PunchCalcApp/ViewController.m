@@ -12,11 +12,25 @@
  *  3) 崩溃时把原因写入 App Documents/crash.log（可在“文件”App 里看到）
  *  4) v2.1 起新增 hrFetch 通道：带 Cookie 会话的 POST 取数，
  *     用于读取公司 EHR（登录 / 考勤 / 工资条），规避 WKWebView 跨域限制。
+ *  5) v2.2 起新增 WPS 考勤月报「签收」窗口：自定义 scheme voopoo-wps://sign 触发，
+ *     弹出覆盖全屏的第二个 WKWebView 打开 WPS 快查页，自动填好
+ *     年份 / 月份 / 工号 / 姓名，用户在上面手写签名后点「确认签收」。
+ *     之所以必须用真网页：签收请求是页面 JS 里 AES 加密后发出的，
+ *     密钥在前端，原生桥没法复现，只能让真页面自己去发。
  * ===================================================================*/
 
 @interface ViewController () <WKNavigationDelegate, WKScriptMessageHandler, NSURLSessionDelegate>
 @property (nonatomic, strong) WKWebView *webView;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *hrStarted;
+
+/* WPS 签收窗口 */
+@property (nonatomic, strong) UIView *wpsOverlay;
+@property (nonatomic, strong) WKWebView *wpsWebView;
+@property (nonatomic, strong) NSString *wpsYear;
+@property (nonatomic, strong) NSString *wpsMonth;
+@property (nonatomic, strong) NSString *wpsEmpId;
+@property (nonatomic, strong) NSString *wpsName;
+@property (nonatomic, assign) BOOL wpsPrefilled;
 @end
 
 static void _writeLogLine(NSString *line) {
@@ -67,6 +81,7 @@ static void _installCrashHandlers(void) {
          * hrFetch 是同一思路的加强版：支持 POST 表单 + 共享 Cookie 会话，用于登录公司 EHR。 */
         [config.userContentController addScriptMessageHandler:self name:@"nativeFetch"];
         [config.userContentController addScriptMessageHandler:self name:@"hrFetch"];
+        [config.userContentController addScriptMessageHandler:self name:@"wpsSign"];
         self.hrStarted = [NSMutableDictionary dictionary];
 
         self.webView = [[WKWebView alloc] initWithFrame:self.view.bounds configuration:config];
@@ -142,7 +157,21 @@ static void _installCrashHandlers(void) {
 }
 
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+    if (webView == self.wpsWebView) {
+        _writeLogLine(@"wps webview 加载完成，准备自动填表");
+        /* SPA 需要一点时间渲染出表单，隔一会儿再填 */
+        __weak typeof(self) weak = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [weak wpsTryPrefill];
+        });
+        return;
+    }
     _writeLogLine(@"webview load finished OK");
+}
+
+- (void)dealloc {
+    [self wpsTearDown];
 }
 
 - (BOOL)prefersStatusBarHidden {
@@ -159,6 +188,10 @@ static void _installCrashHandlers(void) {
 /* ---------- 原生取数通道（规避浏览器跨域限制） ---------- */
 - (void)userContentController:(WKUserContentController *)userContentController
       didReceiveScriptMessage:(WKScriptMessage *)message {
+    if ([message.name isEqualToString:@"wpsSign"]) {
+        [self wpsOpenSign:(message.body ?: @{})];
+        return;
+    }
     if ([message.name isEqualToString:@"hrFetch"]) {
         [self hrHandleMessage:message.body];
         return;
@@ -300,6 +333,145 @@ static void _installCrashHandlers(void) {
         NSString *js = [NSString stringWithFormat:@"window.__hrFetchResult && window.__hrFetchResult(%@);", json];
         [self.webView evaluateJavaScript:js completionHandler:nil];
     });
+}
+
+#pragma mark - WPS 考勤月报签收（覆盖全屏的第二个 WKWebView）
+
+/* body: {year, month, empId, name}
+ * 打开 WPS 快查页并自动填好四个查询条件，剩下的交给用户手写签名 + 点确认签收。
+ * 签名与签收都由页面自己完成（请求是页面 JS 加密发的），原生不插手。 */
+- (void)wpsOpenSign:(NSDictionary *)body {
+    self.wpsYear  = [body[@"year"]  isKindOfClass:[NSString class]] ? body[@"year"]  : @"";
+    self.wpsMonth = [body[@"month"] isKindOfClass:[NSString class]] ? body[@"month"] : @"";
+    self.wpsEmpId = [body[@"empId"] isKindOfClass:[NSString class]] ? body[@"empId"] : @"";
+    self.wpsName  = [body[@"name"]  isKindOfClass:[NSString class]] ? body[@"name"]  : @"";
+    self.wpsPrefilled = NO;
+    /* overlay 每一次都重建，保证是全新的页面与令牌 */
+    [self wpsTearDown];
+    [self wpsPresent];
+}
+
+- (void)wpsPresent {
+    @try {
+        UIWindow *win = self.view.window;
+        if (!win) return;
+        self.wpsOverlay = [[UIView alloc] initWithFrame:win.bounds];
+        self.wpsOverlay.backgroundColor = [UIColor whiteColor];
+        self.wpsOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+        /* 顶栏：标题 + 关闭 */
+        UIView *bar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, win.bounds.size.width, 88)];
+        bar.backgroundColor = [UIColor colorWithRed:0.98 green:0.95 blue:0.96 alpha:1.0];
+        bar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(64, 48, win.bounds.size.width - 128, 26)];
+        title.text = @"考勤月报签收";
+        title.textAlignment = NSTextAlignmentCenter;
+        title.font = [UIFont boldSystemFontOfSize:17];
+        title.textColor = [UIColor colorWithRed:0.24 green:0.20 blue:0.22 alpha:1.0];
+        [bar addSubview:title];
+
+        UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+        close.frame = CGRectMake(8, 44, 60, 34);
+        [close setTitle:@"关闭" forState:UIControlStateNormal];
+        close.titleLabel.font = [UIFont systemFontOfSize:16];
+        [close addTarget:self action:@selector(wpsCloseTapped) forControlEvents:UIControlEventTouchUpInside];
+        [bar addSubview:close];
+        [self.wpsOverlay addSubview:bar];
+
+        WKWebViewConfiguration *cfg = [[WKWebViewConfiguration alloc] init];
+        [cfg.userContentController addScriptMessageHandler:self name:@"wpsSign"];
+        self.wpsWebView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 88, win.bounds.size.width,
+                                                                     win.bounds.size.height - 88)
+                                            configuration:cfg];
+        self.wpsWebView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        self.wpsWebView.navigationDelegate = self;
+        self.wpsWebView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+        [self.wpsOverlay addSubview:self.wpsWebView];
+
+        [win addSubview:self.wpsOverlay];
+        [win bringSubviewToFront:self.wpsOverlay];
+
+        NSURL *u = [NSURL URLWithString:@"https://web.wps.cn/etapps/query/q/5Jeta36W"];
+        [self.wpsWebView loadRequest:[NSURLRequest requestWithURL:u]];
+        _writeLogLine([NSString stringWithFormat:@"wps sign 打开: %@年%@月 %@ %@",
+                       self.wpsYear, self.wpsMonth, self.wpsEmpId, self.wpsName]);
+    } @catch (NSException *e) {
+        _writeLogLine([NSString stringWithFormat:@"wpsPresent exception: %@ %@", e.name, e.reason]);
+    }
+}
+
+- (void)wpsCloseTapped {
+    [self wpsTearDown];
+    /* 关掉后让网页刷新一下，签收状态能立刻反映出来 */
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.webView evaluateJavaScript:@"window.wpsAfterSign && window.wpsAfterSign();" completionHandler:nil];
+    });
+}
+
+- (void)wpsTearDown {
+    @try {
+        if (self.wpsWebView) {
+            [self.wpsWebView stopLoading];
+            [self.wpsWebView.configuration.userContentController removeScriptMessageHandlerForName:@"wpsSign"];
+            [self.wpsWebView removeFromSuperview];
+            self.wpsWebView = nil;
+        }
+        if (self.wpsOverlay) { [self.wpsOverlay removeFromSuperview]; self.wpsOverlay = nil; }
+    } @catch (NSException *e) {}
+}
+
+/* 页面上有 4 个 input：年份 / 月份 / 工号 / 姓名。
+ * 依次写入并派发 input+change 事件，让 React 收到值。 */
+- (void)wpsTryPrefill {
+    if (self.wpsPrefilled) return;
+    if (!self.wpsYear.length || !self.wpsMonth.length || !self.wpsEmpId.length || !self.wpsName.length) return;
+    NSString *js = [NSString stringWithFormat:
+        @"(function(){"
+         "var ins=document.querySelectorAll('input[type=text]');"
+         "if(ins.length<4) return 'wait';"
+         "var v=[%@,%@,%@,%@];"
+         "for(var i=0;i<4;i++){"
+           "var el=ins[i]; if(!el) continue;"
+           "var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
+           "setter.call(el,v[i]);"
+           "el.dispatchEvent(new Event('input',{bubbles:true}));"
+           "el.dispatchEvent(new Event('change',{bubbles:true}));"
+         "}"
+         "return 'ok';"
+        "})()",
+        [self _jsq:self.wpsYear], [self _jsq:self.wpsMonth],
+        [self _jsq:self.wpsEmpId], [self _jsq:self.wpsName]];
+    __weak typeof(self) weak = self;
+    [self.wpsWebView evaluateJavaScript:js completionHandler:^(id res, NSError *err) {
+        if ([res isKindOfClass:[NSString class]] && [res isEqualToString:@"ok"]) {
+            weak.wpsPrefilled = YES;
+            _writeLogLine(@"wps 已自动填好 年份/月份/工号/姓名");
+            /* 填好后自动点一次「查询」，让用户直接看到记录与签收按钮 */
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                [weak wpsTapQuery];
+            });
+        } else if (err) {
+            _writeLogLine([NSString stringWithFormat:@"wps prefill err: %@", err.localizedDescription ?: @""]);
+        }
+    }];
+}
+
+- (void)wpsTapQuery {
+    /* 按钮文字就是「查询」，按文本精确定位后再点 */
+    NSString *js =
+        @"(function(){"
+         "var bs=document.querySelectorAll('button');"
+         "for(var i=0;i<bs.length;i++){"
+           "var t=(bs[i].innerText||'').trim();"
+           "if(t==='查询'){ bs[i].click(); return 'clicked'; }"
+         "}"
+         "return 'notfound';"
+        "})()";
+    [self.wpsWebView evaluateJavaScript:js completionHandler:^(id res, NSError *err) {
+        _writeLogLine([NSString stringWithFormat:@"wps 自动查询: %@", res ?: @"(nil)"]);
+    }];
 }
 
 #pragma mark - NSURLSessionDelegate（自签/内部证书不直接失败）

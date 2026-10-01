@@ -911,6 +911,66 @@ ok('hr 已加入 navPages（切过去底部栏不消失）',
 ok('首页的 HR 按钮已移除', html.indexOf('HR工资条对照 / 导入打卡') < 0);
 ok('HR 页标题改为「公司」', /<div class="title">公司<\/div>/.test(html));
 
+/* ---------- 16. 考勤月报签收（WPS） ---------- */
+section('16. 考勤月报签收');
+ok('WPS 月报地址已定义', S.HR_WPS_URL === 'https://web.wps.cn/etapps/query/q/5Jeta36W');
+ok('wpsSign 已挂 window', script.indexOf('window.wpsSign = wpsSign') >= 0);
+ok('签收卡 DOM 齐备',
+  ['hrWpsCard', 'wpsYear', 'wpsMonth', 'wpsWho', 'wpsSignBtn', 'wpsHint'].every((id) => html.indexOf('id="' + id + '"') >= 0));
+ok('wpsBridgeOn 已定义', typeof S.wpsBridgeOn === 'function');
+/* 工号姓名从公司数据里提取（用户要求不用手填） */
+S.storeSet('punchSalaryHrWho_v1', {});
+const who1 = S.hrWhoFromRows([{ reference_code: 'T00001', name: '测试员' }], '测试');
+ok('从考勤行里取到工号', who1 && who1.empId === 'T00001', who1 && who1.empId);
+ok('从考勤行里取到姓名', who1 && who1.name === '测试员', who1 && who1.name);
+ok('工号姓名已落盘', (() => { const w = S.hrWhoGet(); return w && w.empId === 'T00001' && w.name === '测试员'; })());
+ok('空数据不覆盖已存身份', (() => { S.hrWhoFromRows([], 'x'); const w = S.hrWhoGet(); return w && w.empId === 'T00001'; })());
+ok('缺 reference_code 时用 employee_id 兜底', (() => {
+  const before = S.hrWhoGet();
+  const got = S.hrWhoFromRows([{ employee_id: 'E9', name: 'N9' }], 'x');
+  const okFallback = got && got.empId === 'E9' && got.name === 'N9';
+  S.storeSet('punchSalaryHrWho_v1', before);   /* 还原，别影响后面的断言 */
+  return okFallback;
+})());
+/* 未登录不渲染签收卡内容 */
+S._hrLoggedIn = false;
+S.wpsRender();
+ok('未登录时不写入签收提示', stub('wpsHint').innerHTML === '' || stub('wpsHint').innerHTML.indexOf('手写签名') < 0);
+/* 登录后渲染：拿到工号姓名 -> 提示可签收；没有桥时禁用按钮 */
+S._hrLoggedIn = true; S._hrAcct = 'u'; S._hrPwd = 'p';
+S._hrYM = '2026-08'; S._curYM = '2026-08';
+S.wpsRender();
+ok('签收提示说明会弹出内嵌窗口', stub('wpsHint').innerHTML.indexOf('手写签名') >= 0 || stub('wpsHint').innerHTML.indexOf('App 内使用') >= 0);
+ok('签收卡显示工号', stub('wpsWho').innerHTML.indexOf('T00001') >= 0, stub('wpsWho').innerHTML.slice(0, 120));
+ok('签收卡显示姓名', stub('wpsWho').innerHTML.indexOf('测试员') >= 0);
+ok('年份按当前查看月份预填', stub('wpsYear').value === '2026', stub('wpsYear').value);
+ok('月份按当前查看月份预填', stub('wpsMonth').value === '8', stub('wpsMonth').value);
+/* 浏览器环境（无原生桥）应禁用按钮并提示 */
+ok('无原生桥时禁用签收按钮', stub('wpsSignBtn').disabled === true);
+S.wpsSign();   /* 无桥时应被拦住，不抛异常 */
+ok('无原生桥时点击签收被拦（不抛异常）', true);
+/* 有桥：应把参数投给原生 */
+S.window.webkit = { messageHandlers: { wpsSign: { postMessage: (m) => { S.__wpsMsg = m; } } } };
+ok('wpsBridgeOn 检测到桥', S.wpsBridgeOn() === true);
+S.wpsRender();
+ok('有原生桥时按钮可用', stub('wpsSignBtn').disabled === false);
+stub('wpsYear').value = '2026'; stub('wpsMonth').value = '6';
+S.wpsSign();
+const wm = S.__wpsMsg || {};
+ok('签收消息带年份', wm.year === '2026', wm.year);
+ok('签收消息带月份', wm.month === '6', wm.month);
+ok('签收消息带工号（来自公司数据）', wm.empId === 'T00001', wm.empId);
+ok('签收消息带姓名（来自公司数据）', wm.name === '测试员', wm.name);
+/* 参数校验 */
+S.__wpsMsg = null; stub('wpsYear').value = '26';
+S.wpsSign();
+ok('年份不是 4 位时拒绝', S.__wpsMsg === null);
+S.__wpsMsg = null; stub('wpsYear').value = '2026'; stub('wpsMonth').value = '13';
+S.wpsSign();
+ok('月份越界时拒绝', S.__wpsMsg === null);
+/* 原生回调存在 */
+ok('wpsAfterSign 回调已挂 window', script.indexOf('window.wpsAfterSign') >= 0);
+
 /* 月份不一致必须告警（考勤接口只有本月/上月两档，服务端会回落） */
 ok('跨月时给出告警文案', script.indexOf('月份对不上，已隐藏金额差额') >= 0 && script.indexOf('无法对照') >= 0);
 ok('HR 页已注册进 showPage', /var pages = \[[^\]]*'hr'[^\]]*\]/.test(script));

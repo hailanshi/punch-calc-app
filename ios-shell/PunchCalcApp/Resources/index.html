@@ -609,6 +609,28 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         </div>
       </div>
 
+        <div class="card pad" id="hrWpsCard">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px;">考勤月报签收</div>
+          <div class="hint" style="margin-bottom:10px;">
+            WPS「时薪考勤月报」。工号与姓名取自公司系统，年份月份自己填。
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <div class="field" style="flex:1;margin:0;">
+              <label>年份</label>
+              <input type="number" id="wpsYear" placeholder="2026" inputmode="numeric">
+            </div>
+            <div class="field" style="flex:1;margin:0;">
+              <label>月份</label>
+              <input type="number" id="wpsMonth" placeholder="8" inputmode="numeric" min="1" max="12">
+            </div>
+          </div>
+          <div class="hint" id="wpsWho" style="margin:8px 2px;"></div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn main" style="flex:1;" id="wpsSignBtn" onclick="window.wpsSign()">去签收</button>
+          </div>
+          <div class="hint" id="wpsHint" style="margin-top:10px;"></div>
+        </div>
+
         <div class="card pad" id="hrAcctCard">
           <div style="font-size:13px;color:var(--ink2);">
             <b>数据来源</b>：公司 EHR（hr.voopootech.net）。工资条 = 个人工资查询，打卡 = 原始打卡记录。<br>
@@ -2647,6 +2669,7 @@ window.addEventListener('error', function(e){
 var HR_ORIGIN = 'https://hr.voopootech.net';
 var LS_HRCACHE = 'punchSalaryHrCache_v1';
 var LS_HRACCT  = 'punchSalaryHrAcct_v1';   /* 账号密码只存本机，由用户勾选「保存登录」决定是否保留 */
+var LS_HRWHO   = 'punchSalaryHrWho_v1';    /* 工号 / 姓名：从公司考勤数据里读到后存下来，供 WPS 月报查询用 */
 /* 运行期凭据：由登录页输入或从本机存储读入，源码里不预置任何账号 */
 var _hrAcct = '';
 var _hrPwd  = '';
@@ -2786,6 +2809,29 @@ function hrForm(o){
 function hrCacheGet(){ var c = storeGet(LS_HRCACHE, null); return (c && typeof c === 'object') ? c : {}; }
 function hrCacheSet(c){ storeSet(LS_HRCACHE, c); }
 
+/* ---------- 工号 / 姓名：从公司考勤数据里读到，供 WPS 月报查询用 ----------
+ * 公司接口的每行都有 reference_code(工号) 和 name(姓名)，
+ * 读到就存下来，之后 WPS 查询不用再手填。 */
+function hrWhoGet(){
+  var w = storeGet(LS_HRWHO, null);
+  return (w && typeof w === 'object' && w.empId) ? w : null;
+}
+/* 从任意一批考勤/打卡行里提取工号与姓名 */
+function hrWhoFromRows(rows, at){
+  try{
+    if (!rows || !rows.length) return null;
+    var r = rows[0] || {};
+    var empId = String(r.reference_code || r.employee_id || '').replace(/^\s+|\s+$/g, '');
+    var name  = String(r.name || '').replace(/^\s+|\s+$/g, '');
+    if (!empId && !name) return null;
+    var old = hrWhoGet() || {};
+    var w = { empId: empId || old.empId || '', name: name || old.name || '', at: at || '' };
+    if (w.empId === (old.empId || '') && w.name === (old.name || '')) return w;
+    storeSet(LS_HRWHO, w);
+    return w;
+  }catch(e){ return null; }
+}
+
 /* HR 页与首页/记录页共用同一个月，默认就是 _curYM（不另设「上个月」，
  * 否则记录页在 10 月、HR 页在 9 月，导入的记录会落到意料之外的月份）。 */
 var _hrYM = '';
@@ -2874,6 +2920,66 @@ function hrNum(v){
 }
 function hrH(v){ return (Math.round(hrNum(v)*100)/100).toFixed(2); }
 function hrM(v){ return fmtMoney(hrNum(v)); }
+/* =====================================================================
+ * 考勤月报签收（WPS 快查 web.wps.cn/etapps/query/q/5Jeta36W）
+ *   查询条件：年份 + 月份 + 工号 + 姓名（四个都必填）
+ *   工号姓名来自公司系统（HR_WHO），年份月份由用户填。
+ *   签收动作必须由 WPS 真页面完成：它的请求是页面 JS 里 AES 加密后发的，
+ *   密钥在前端，原生桥复现不了。所以 App 只负责「打开一个内嵌窗口 +
+ *   自动填好四个条件 + 自动查询」，用户在上面手写签名后点「确认签收」。
+ * ===================================================================*/
+var HR_WPS_URL = 'https://web.wps.cn/etapps/query/q/5Jeta36W';
+/* 原生签收窗口是否可用（浏览器里打开 App 时没有这个桥） */
+function wpsBridgeOn(){
+  return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.wpsSign);
+}
+function wpsDefYM(){
+  var y = $('wpsYear'), m = $('wpsMonth');
+  if (y && !y.value) y.value = _hrYM ? _hrYM.slice(0, 4) : String(new Date().getFullYear());
+  if (m && !m.value) m.value = _hrYM ? String(parseInt(_hrYM.slice(5, 7), 10)) : String(new Date().getMonth() + 1);
+}
+function wpsRender(){
+  if (!_hrLoggedIn) return;
+  wpsDefYM();
+  var w = hrWhoGet();
+  var who = $('wpsWho');
+  if (who){
+    who.innerHTML = w
+      ? '工号 <b>' + esc(w.empId) + '</b>　姓名 <b>' + esc(w.name) + '</b>'
+        + '<span style="color:var(--ink3);">（取自公司系统' + (w.at ? '，' + esc(w.at) : '') + '）</span>'
+      : '<b style="color:var(--danger);">还没拿到工号 / 姓名</b>：先点上方「读取HR数据」，App 会从公司考勤里自动取。';
+  }
+  var h = $('wpsHint');
+  if (h){
+    h.innerHTML = wpsBridgeOn()
+      ? '点「去签收」会弹出 WPS 月报窗口，年份月份工号姓名已自动填好并查询；'
+        + '在页面上<b>手写签名</b>后点「确认签收」，成功后关闭窗口即可。'
+      : '<b style="color:var(--danger);">签收需要在 App 内使用</b>（浏览器里打开无法弹出内嵌窗口）。';
+  }
+  var b = $('wpsSignBtn');
+  if (b) b.disabled = !(w && w.empId && w.name) || !wpsBridgeOn();
+}
+function wpsSign(){
+  var w = hrWhoGet();
+  if (!w || !w.empId || !w.name){ toast('还没拿到工号/姓名，先点「读取HR数据」'); return; }
+  var y = ($('wpsYear') && $('wpsYear').value || '').replace(/[^0-9]/g, '');
+  var m = ($('wpsMonth') && $('wpsMonth').value || '').replace(/[^0-9]/g, '');
+  if (!y || y.length !== 4){ toast('请填 4 位年份，如 2026'); return; }
+  var mi = parseInt(m, 10);
+  if (!(mi >= 1 && mi <= 12)){ toast('月份填 1~12'); return; }
+  if (!wpsBridgeOn()){ toast('请在 App 内使用签收功能'); return; }
+  try{
+    window.webkit.messageHandlers.wpsSign.postMessage({
+      year: y, month: String(mi), empId: String(w.empId), name: String(w.name)
+    });
+    toast('已打开签收窗口：' + y + '年' + mi + '月');
+  }catch(e){ toast('打开签收窗口失败'); }
+}
+/* 原生窗口关闭后回调：提示一句（考勤与工资条可能要重新读才有最新签收状态） */
+window.wpsAfterSign = function(){
+  try{ toast('签收窗口已关闭。若刚签收成功，重新「读取HR数据」可看到最新状态。'); }catch(e){}
+};
+
 function hrRender(){
   hrInitYM();
   /* 未登录就先只显示登录卡 */
@@ -2888,10 +2994,11 @@ function hrRender(){
   }
   var cache = hrCacheGet();
   var d = cache[_hrYM];
-  if (!d){ hrRenderEmpty(); return; }
+  if (!d){ hrRenderEmpty(); wpsRender(); return; }
   hrRenderPay(d);
   hrRenderCmp(d);
   hrRenderDays(d);
+  wpsRender();
   /* 从记录页点「从HR导入打卡」进来时，取数完成自动展开导入卡 */
   if (_hrWantImport){ _hrWantImport = false; openOnlyCard('hrDayCard'); }
   var st = $('hrStatus');
@@ -3466,6 +3573,9 @@ function hrFetchData(ym, off, at){
     }
     hrCacheSet(cache);
     _hrLoggedIn = true;
+    /* 顺手从考勤/打卡数据里抓工号与姓名，供 WPS 月报查询用（用户不必手填） */
+    var wrows = ((rec.card && rec.card.rows) || []).concat((rec.kq && rec.kq.rows) || []);
+    hrWhoFromRows(wrows, ymLabel(ym) + ' 取数');
     hrBusy(false, '');
     /* 从记录页点「从HR导入打卡」进来的：若本月没有可导入的打卡
      * （当月常常只有 1 天、甚至一条卡都没打），自动再取上月一次，
@@ -3561,6 +3671,7 @@ window.hrSelAll = hrSelAll;
 window.hrImport = hrImport;
 window.hrGotoYM = hrGotoYM;
 window.recHrImport = recHrImport;
+window.wpsSign = wpsSign;
 window.pickType = pickType;
 window.setHours = setHours;
 window.punchChanged = punchChanged;
