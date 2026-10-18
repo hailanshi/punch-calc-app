@@ -308,17 +308,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4'].filter(g => heads[g].
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.5', S.APP_VER === '2.5', S.APP_VER);
-ok('title 带 v2.5', /<title>[^<]*v2\.5[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.5', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.5</string>') >= 0);
+ok('APP_VER = 2.6', S.APP_VER === '2.6', S.APP_VER);
+ok('title 带 v2.6', /<title>[^<]*v2\.6[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.6', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.6</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：奖金基数', stub('sumPay').textContent.indexOf('奖金') >= 0, stub('sumPay').textContent);
 ok('折叠标题摘要：加班折算', stub('sumOt').textContent.indexOf('174') >= 0 || stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.5') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.6') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });
@@ -991,6 +991,49 @@ section('18. 餐补 = min(出勤天数 × 每日餐补, 上限)');
   S.setStdMap({});
   S.setBaseMap({});
   S.setSet(Object.assign(S.getSet(), { meal: 15, mealCap: 360 }));
+}
+
+/* ---------- 19. 原始打卡补充日考勤（公司折算滞后） ---------- */
+section('19. 打卡补充日考勤');
+{
+  // 10/16 型：日考勤只给正班 8h，打卡有到 21:00 → 补上 3h 加班
+  const kq1 = [{ id_date: '2026-12-01', calc_field1: 8, calc_field3: 0, calc_field5: 0 }];
+  const cd1 = [{ kq_date: '2026-12-01',
+    card1: '2026-12-01 08:15', card2: '2026-12-01 11:50',
+    card3: '2026-12-01 12:50', card4: '2026-12-01 17:20',
+    card5: '2026-12-01 17:55', card6: '2026-12-01 21:00' }];
+  let b = S.hrBuildFromKqDetail('2026-12', kq1, cd1);
+  ok('日考勤缺加班 → 打卡补成 8+3',
+    b.recs.length === 1 && b.recs[0].n === 8 && b.recs[0].d === 3,
+    JSON.stringify(b.recs.map(r => [r.n, r.d, r.w])));
+
+  // 10/17 型：日考勤还没更新（全 0），打卡有 → 照样写入
+  const kq2 = [{ id_date: '2026-12-01', calc_field1: 0, calc_field3: 0, calc_field5: 0 }];
+  b = S.hrBuildFromKqDetail('2026-12', kq2, cd1);
+  ok('日考勤未更新 → 按打卡写入 8+3',
+    b.recs.length === 1 && b.recs[0].n === 8 && b.recs[0].d === 3,
+    JSON.stringify(b.recs.map(r => [r.n, r.d, r.w])));
+
+  // 9/20 型：公司标休息日（f5=11），App 内置表当补班日 → 档位必须听公司的
+  const kq3 = [{ id_date: '2026-09-20', calc_field1: 0, calc_field3: 0, calc_field5: 11 }];
+  const cd3 = [{ kq_date: '2026-09-20',
+    card1: '2026-09-20 08:15', card2: '2026-09-20 11:50',
+    card3: '2026-09-20 12:50', card4: '2026-09-20 17:20',
+    card5: '2026-09-20 17:55', card6: '2026-09-20 21:00' }];
+  b = S.hrBuildFromKqDetail('2026-09', kq3, cd3);
+  ok('公司标休息日 → 整天进周末档，不拆成 8+3',
+    b.recs.length === 1 && b.recs[0].w === 11 && b.recs[0].n === 0 && b.recs[0].d === 0,
+    JSON.stringify(b.recs.map(r => [r.n, r.d, r.w])));
+
+  // 打卡比考勤多一天（公司还没折算）→ 也补进来
+  const kq4 = [{ id_date: '2026-12-01', calc_field1: 8, calc_field3: 3, calc_field5: 0 }];
+  const cd4 = cd1.concat([{ kq_date: '2026-12-02',
+    card1: '2026-12-02 08:15', card2: '2026-12-02 11:50',
+    card3: '2026-12-02 12:50', card4: '2026-12-02 17:20',
+    card5: '2026-12-02 17:55', card6: '2026-12-02 21:00' }]);
+  b = S.hrBuildFromKqDetail('2026-12', kq4, cd4);
+  ok('打卡多出的日期被补进记录', b.recs.length === 2, b.recs.length);
+  ok('补充记录带说明', b.recs.some(r => /打卡补充/.test(r.note)), b.recs.map(r => r.note).join(' | '));
 }
 
 console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败');

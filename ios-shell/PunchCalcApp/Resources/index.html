@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.5</title>
+<title>打卡工资计算器 v2.6</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -654,7 +654,7 @@ var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYY
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 var LS_KQCOVER = 'punchSalaryKqCover_v1'; // 每月考勤数据覆盖到的最后一天 {YYYY-MM:YYYY-MM-DD}
 
-var APP_VER = '2.5';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.6';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   /* ===== 公司工资条口径：只有这些参数 ===== */
@@ -2934,9 +2934,17 @@ var KQ_LEAVE_FIELDS = [
 ];
 var KQ_HOUR_FIELDS = [1, 3, 5];   /* 正班 / 平时加班 / 周末加班 */
 
-function hrBuildFromKqDetail(ym, rows){
+function hrBuildFromKqDetail(ym, rows, cardRows){
   var recs = [], works = 0, leaves = 0, skipped = 0, unknown = {};
   rows = rows || [];
+  /* 原始打卡按日期建索引：公司日考勤有滞后（10/16 只给 8h、10/17 还没出），
+   * 打卡是实时的，所以两者取大 —— 谁算得多用谁，保证不漏加班。 */
+  var cards = {};
+  var crs = cardRows || [];
+  for (var ci=0; ci<crs.length; ci++){
+    var cr0 = crs[ci] || {};
+    if (cr0.kq_date) cards[cr0.kq_date] = cr0;
+  }
   for (var i=0;i<rows.length;i++){
     var r = rows[i] || {};
     var date = String(r.id_date || '');
@@ -2944,6 +2952,33 @@ function hrBuildFromKqDetail(ym, rows){
     var f1 = hrNum(r.calc_field1);
     var f3 = hrNum(r.calc_field3);
     var f5 = hrNum(r.calc_field5);
+
+    /* 与原始打卡取大：日考勤还没更新到位时，用打卡折算值补上 */
+    var card = cards[date];
+    var punchedTxt = '';
+    if (card){
+      var pk = hrDayPunch(card, date);
+      if (pk && pk.punched > 0){
+        /* 公司统计一律取整数小时（迟到/早退才留小数） */
+        var pn = Math.round(pk.normal);
+        var po = Math.round(pk.ot);
+        var wh = Math.round(pk.normal + pk.ot);
+        /* ★ 档位以公司日考勤为准：公司若把这天记为休息日（f5>0 且无正班），
+         *   就整天算休息日加班；不能因为 App 内置节假日表认为是补班日就拆成 8+3。
+         *   实测 2026-09-20（周日）：日考勤 f5=11，内置表却当补班日 → 之前多算 3h。
+         *   日考勤完全没值时才退回内置表判断。 */
+        var hasKq = (f1 > 0 || f3 > 0 || f5 > 0);
+        var kqSaysRest = hasKq ? (f5 > 0 && f1 === 0 && f3 === 0) : null;
+        var isRest = (kqSaysRest === null) ? !!pk.rest : kqSaysRest;
+        if (isRest){
+          if (wh > f5) f5 = wh;
+        } else {
+          if (pn > f1) f1 = pn;
+          if (po > f3) f3 = po;
+        }
+        punchedTxt = '；打卡 ' + hrDayPunchText(card);
+      }
+    }
 
     /* 汇总各类假期工时；deduct 标记这天的假是否要扣钱 */
     var lv = 0, lvTxt = [], deduct = false;
@@ -2972,7 +3007,7 @@ function hrBuildFromKqDetail(ym, rows){
         date: date, type: 'work', hours: r1(f1 + f3 + f5),
         n: r1(f1), d: r1(f3), w: r1(f5), h: 0,
         isHoliday: 0, isWeekend: 0,
-        src: 'kqdetail', note: '日考勤同步'
+        src: 'kqdetail', note: '日考勤同步' + punchedTxt
       });
       works++;
     } else if (lv > 0){
@@ -2989,14 +3024,35 @@ function hrBuildFromKqDetail(ym, rows){
       skipped++;   /* 全 0：休息或未出勤，不写记录 */
     }
   }
+  /* 考勤行可能比打卡少（公司还没折算）：把打卡里有、考勤里没有的日期补进来，
+   * 否则今天打了卡、公司明天才更新，这一天就会被漏掉。 */
+  var seenDates = {};
+  for (var sd=0; sd<recs.length; sd++) seenDates[recs[sd].date] = 1;
+  for (var cd in cards){
+    if (!Object.prototype.hasOwnProperty.call(cards, cd)) continue;
+    if (cd.slice(0,7) !== ym || seenDates[cd]) continue;
+    var c2 = cards[cd];
+    var pk2 = hrDayPunch(c2, cd);
+    if (!pk2 || pk2.punched <= 0) continue;
+    var pn2 = Math.round(pk2.normal), po2 = Math.round(pk2.ot), wh2 = pn2 + po2;
+    if (wh2 <= 0) continue;
+    var isRest2 = !!pk2.rest;
+    recs.push({
+      date: cd, type: 'work', hours: wh2,
+      n: isRest2 ? 0 : pn2, d: isRest2 ? 0 : po2, w: isRest2 ? wh2 : 0, h: 0,
+      isHoliday: 0, isWeekend: 0, src: 'kqdetail',
+      note: '打卡补充（考勤未更新）：' + hrDayPunchText(c2)
+    });
+    works++;
+  }
   return {recs: recs, works: works, leaves: leaves, skipped: skipped,
           unknown: Object.keys(unknown)};
 }
 
 /* 整月覆盖写入：先清掉该月原有记录，再写入公司日考勤结果。
  * 「考勤有变更 → 重读一次 → 本地自动覆盖」，不会新旧混在一起。 */
-function hrSyncMonth(ym, rows){
-  var built = hrBuildFromKqDetail(ym, rows);
+function hrSyncMonth(ym, rows, cardRows){
+  var built = hrBuildFromKqDetail(ym, rows, cardRows);
   if (!built.recs.length) return {added: 0, removed: 0, built: built};
   var old = getRecs(), recs = [], removed = 0;
   for (var i=0;i<old.length;i++){
@@ -3014,6 +3070,11 @@ function hrSyncMonth(ym, rows){
   for (var q=0;q<rows.length;q++){
     var d0 = String((rows[q] || {}).id_date || '');
     if (/^\d{4}-\d{2}-\d{2}$/.test(d0) && d0.slice(0,7) === ym && d0 > maxD) maxD = d0;
+  }
+  var crs2 = cardRows || [];
+  for (var q2=0;q2<crs2.length;q2++){
+    var d1 = String((crs2[q2] || {}).kq_date || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d1) && d1.slice(0,7) === ym && d1 > maxD) maxD = d1;
   }
   if (maxD) setKqCoverTo(ym, maxD);
   return {added: built.recs.length, removed: removed, built: built, coverTo: maxD};
@@ -3176,7 +3237,7 @@ function hrFetchData(ym, off, at){
       if (krows2.length){
         var kr = hrMonthRange(krows2.map(function(x){ return x.id_date; }));
         var syncYM = kr.to || ym;
-        var sr = hrSyncMonth(syncYM, krows2);
+        var sr = hrSyncMonth(syncYM, krows2, (rec.card && rec.card.rows) || []);
         if (sr.added > 0){
           resplitRecords();
           refreshHome();
