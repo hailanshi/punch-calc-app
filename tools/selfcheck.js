@@ -1,4 +1,4 @@
-﻿/* 打卡工资计算器 · 自检（静态检查 + 逻辑自检）
+/* 打卡工资计算器 · 自检（静态检查 + 逻辑自检）
  *
  * 用法（在仓库根目录）:
  *     node tools/selfcheck.js 打卡工资计算器.html
@@ -138,12 +138,15 @@ const S = sandbox;
 
 /* 5.1 默认值 */
 const st = S.getSet();
-ok('默认 otMode = rate', S.otModeOf(st) === 'rate', st.otMode);
+/* 默认加班方式 = 底薪倍数（= 公司工资条口径：基本工资÷174×1.5/2/3） */
+ok('默认 otMode = mult（工资条口径）', S.otModeOf(st) === 'mult', st.otMode);
 ok('默认倍数 1.5/2/3', st.ot1 === 1.5 && st.ot2 === 2 && st.ot3 === 3, [st.ot1, st.ot2, st.ot3].join('/'));
 ok('默认时薪 23.28/31.03/46.55', st.otRate1 === 23.28 && st.otRate2 === 31.03 && st.otRate3 === 46.55,
   [st.otRate1, st.otRate2, st.otRate3].join('/'));
 
-/* 5.2 固定时薪模式：单价写死，不随底薪变 */
+/* 5.2 固定时薪模式：单价写死，不随底薪变
+ * 注意：默认已是 mult（公司口径），这里必须显式切到 rate 再测。 */
+S.setSet(Object.assign(S.getSet(), { otMode: 'rate' }));
 S.setRecs([
   S.buildRec('2026-10-10', 'work', 10, ''),  // 调休补班工作日 → 2h 平日加班
   S.buildRec('2026-10-11', 'work', 6, ''),   // 周日 → 6h 周末加班
@@ -351,8 +354,8 @@ ok('旧格式纯数字兼容读取', si.baseDiv === 174 && si.stdSrc === 'manual
 S.setStdMap({});
 ok('stdRecOf 对空/非法值返回 null', S.stdRecOf({}, '2026-01') === null && S.stdRecOf({ x: 'abc' }, 'x') === null);
 
-// 6.8 影响工资：手动改标准工时 → 出勤比例变 → 底薪变
-// 2026-10-01/02/03 三天法定假，没打卡会自动按 3×8 = 24h 有效出勤计入
+// 6.8 公司工资条口径：正班合计 = 应出勤工时 − 请假工时
+// 2026-10-01/02/03 三天法定假，没打卡会自动按 3×8 = 24h 计入「有效出勤」参考值
 S.setRecs([]);
 const eff = S.calcMonth('2026-10').sum.effHours;
 ok('2026-10 法定假自动计 3 天 × 8 = 24h 有效出勤', eff === 24, eff);
@@ -360,14 +363,20 @@ S.setStdMap({ '2026-10': 100 });
 const payTight = S.calcMonth('2026-10');
 S.setStdMap({ '2026-10': 200 });
 const payLoose = S.calcMonth('2026-10');
-S.setStdMap({ '2026-10': 20 });
-const payCap = S.calcMonth('2026-10');
 S.setStdMap({});
-ok('标准工时 100h → 出勤比例 24/100 = 24%', Math.round(payTight.ratio * 100) === 24, Math.round(payTight.ratio * 100));
-ok('标准工时 200h → 出勤比例 24/200 = 12%', Math.round(payLoose.ratio * 100) === 12, Math.round(payLoose.ratio * 100));
-ok('标准工时 20h → 比例封顶 100%', payCap.ratio === 1, payCap.ratio);
-ok('底薪随标准工时变化', payTight.base !== payLoose.base && payCap.base > payTight.base,
-  [payCap.base, payTight.base, payLoose.base].join('/'));
+ok('无请假 → 正班合计 = 应出勤 100h', payTight.attendHours === 100, payTight.attendHours);
+ok('无请假 → 出勤比例 100%', payTight.ratio === 1, payTight.ratio);
+ok('无请假 → 正班工资 = 基本工资全额', payTight.base === 2700, payTight.base);
+ok('换应出勤工时不改变全额结论', payLoose.base === 2700, payLoose.base);
+// 请假 1 天（显式 absent 记录）→ 扣 8h
+S.setStdMap({ '2026-10': 100 });
+S.setRecs([S.buildRec('2026-10-12', 'absent', 0, '事假')]);
+const payLeave = S.calcMonth('2026-10');
+ok('请假 1 天 → 正班合计 100 − 8 = 92h', payLeave.attendHours === 92, payLeave.attendHours);
+ok('请假 1 天 → 出勤比例 92%', Math.round(payLeave.ratio * 100) === 92, Math.round(payLeave.ratio * 100));
+ok('请假 1 天 → 正班工资 2700÷100×92 = 2484', payLeave.base === 2484, payLeave.base);
+S.setStdMap({});
+S.setRecs([]);
 ok('calcMonth 带出标准工时来源', S.calcMonth('2026-10').stdSrc === 'auto', S.calcMonth('2026-10').stdSrc);
 
 /* ---------- 7. 设置页瘦身：手风琴互斥 ---------- */
@@ -390,17 +399,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4','g5'].filter(g => head
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.2', S.APP_VER === '2.2', S.APP_VER);
-ok('title 带 v2.2', /<title>[^<]*v2\.2[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.2', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.2</string>') >= 0);
+ok('APP_VER = 2.3', S.APP_VER === '2.3', S.APP_VER);
+ok('title 带 v2.2', /<title>[^<]*v2\.3[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.3', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.3</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：底薪', stub('sumBase').textContent.indexOf('底薪') >= 0, stub('sumBase').textContent);
 ok('折叠标题摘要：加班方式', stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.2') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.3') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });

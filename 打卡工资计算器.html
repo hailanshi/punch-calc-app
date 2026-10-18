@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.2</title>
+<title>打卡工资计算器 v2.3</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -351,7 +351,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
 
       <div class="toolWrap" style="margin:6px 0 2px;">
-        <button type="button" class="chip" onclick="window.recHrImport()">📥 从HR导入打卡</button>
+        <button type="button" class="chip" onclick="window.recHrImport()">📥 同步公司日考勤</button>
         <button type="button" class="chip" onclick="window.exportRecs('month')">导出本月</button>
         <button type="button" class="chip" onclick="window.exportRecs('all')">导出全部</button>
         <button type="button" class="chip" onclick="window.pickImport('append')">导入·追加</button>
@@ -466,6 +466,8 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
             <div class="field"><label>岗位补贴（元）</label><input type="number" id="sPost" step="10"></div>
             <div class="field"><label>绩效奖金（元）</label><input type="number" id="sPerf" step="10"></div>
             <div class="field"><label>全勤奖（元）</label><input type="number" id="sFull" step="10"></div>
+            <div class="field"><label>工龄奖（元）</label><input type="number" id="sSenior" step="10"></div>
+            <div class="field"><label>其他补贴（元）</label><input type="number" id="sOther" step="10"></div>
             <div class="field"><label>每月社保扣除（元）</label><input type="number" id="sSocial" step="10"></div>
           </div>
           <div class="field" style="margin-bottom:0;"><label>计算个税</label>
@@ -597,7 +599,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         </div>
 
       <div class="card collapsed" id="hrDayCard">
-        <button type="button" class="cardHead" onclick="window.toggleCard(this)">网页打卡 → 导入本机<span class="chev">▶</span></button>
+        <button type="button" class="cardHead" onclick="window.toggleCard(this)">日考勤 → 同步本机（自动覆盖）<span class="chev">▶</span></button>
         <div class="cardBody">
           <div class="hint" id="hrImpHint" style="margin-bottom:8px;"></div>
           <div style="display:flex;gap:8px;margin-bottom:10px;">
@@ -700,7 +702,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
         <p>底部导航第 4 个是<b>「公司」</b>页，用来跟公司系统（hr.voopootech.net）对数据。三件事：<br>
         <b>① 网页工资条</b>：读取公司在册工资条的全部项目。<br>
         <b>② 工资条对照</b>：把工资条每一项和本机算出来的同名项并排显示，逐项给出差额（本机 − 网页），一致显绿、不一致显红。<br>
-        <b>③ 网页打卡 → 导入本机</b>：把公司原始打卡导入本机记录。</p>
+        <b>③ 日考勤 → 同步本机（自动覆盖）</b>：公司已折算好的每日正班 / 平时加班 / 周末加班 / 请假工时，整月覆盖写入本机。</p>
         <p><b>登录</b>：源码里<b>不预置任何账号</b>，必须自己输账号密码。勾选「保存登录」会把账号存到本机，下次自动填好，但仍需点一下「登录」。<b>登录以服务器返回为准</b>——密码错了会留在登录页并显示原因，可改完直接重试。</p>
         <p><b>两个接口的月份范围不同（重要）：</b><br>
         · <b>工资条</b>：任意月份都能查（当月未结算会提示）。<br>
@@ -709,7 +711,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       </div>
       <div class="card pad helpSec">
         <h3>📥 打卡导入规则（公司班次口径）</h3>
-        <p>入口两个：记录页顶部「📥 从HR导入打卡」（推荐，会自己找有数据的月份），或公司页「网页打卡 → 导入本机」。</p>
+        <p><b>v2.3 起自动同步</b>：点一次「读取HR数据」，日考勤会整月覆盖写入本机，不再需要手动打卡。考勤有变更时重读一次即自动对齐。入口：记录页顶部「📥 同步公司日考勤」，或公司页的同步卡片。</p>
         <p>工时<b>不按打卡分钟精确累加</b>，而是按公司班次口径折算，<b>统计一律取整数</b>：<br>
         · <b>正班</b> = 实际落在 <b>8:20-11:50 + 12:50-17:20</b> 内的时长，满勤 <b>8h</b>；<br>
         · <b>加班</b> = <b>18:00</b> 之后，正常 <b>3h</b>；<br>
@@ -801,17 +803,24 @@ var LS_THEME= 'punchSalaryTheme_v1';
 var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 
-var APP_VER = '2.2';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.3';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   base:2700, social:420, full:100, perf:50, post:400,
+  /* senior=工龄奖、other=其他补贴：公司工资条上都是直接给金额的项，
+   * 工龄奖并入「奖金汇总」一起按正班完成率折算，其他补贴整额计入。 */
+  senior:0, other:0,
   meal:15, mealCap:360, std:174, auto:11,
   stdOt:174,        /* 加班时薪分母：倍数模式下是「底薪÷分母×倍数」的分母；固定时薪模式下只用于显示参考正常时薪 */
   /* ---- 加班费两套参数，二选一（由 otMode 决定），永远只有一套参与计算 ----
-   * otMode:'rate' 固定时薪（元/小时），直接乘工时；默认值 = 2700÷174×1.5/2/3 四舍五入到分
-   * otMode:'mult' 底薪倍数，加班费 = 底薪÷stdOt × 倍数 × 工时（跟着底薪浮动）
+   * otMode:'mult' 底薪倍数（**默认，= 公司工资条口径**）：
+   *        加班费 = 基本工资 ÷ 174 × 1.5 / 2 / 3 × 工时，跟着底薪浮动。
+   *        实测工资条：2700÷174×1.5×51 = 1187.07、2700÷174×2×22 = 682.76；
+   *        8 月底薪 2520 时同样成立：2520÷174×1.5×60 = 1303.45。
+   * otMode:'rate' 固定时薪（元/小时），直接乘工时；默认值 = 2700÷174×1.5/2/3 四舍五入到分。
+   *        底薪变了单价不变，与公司工资条会不一致，仅在特殊场景用。
    * 两套值都完整保存，切换时不会丢；未参与计算的那套在设置页灰显并标注。 */
-  otMode:'rate',
+  otMode:'mult',
   ot1:1.5, ot2:2, ot3:3,                        /* 倍数模式：平日 / 周末 / 法定 */
   otRate1:23.28, otRate2:31.03, otRate3:46.55,  /* 固定时薪模式：平日 / 周末 / 法定 */
   taxOn:false,      /* 是否计算个税 */
@@ -966,7 +975,8 @@ function setStdMap(m){ storeSet(LS_STD, m); }
 function stdRecOf(map, ym){
   var v = (map || {})[ym];
   if (v && typeof v === 'object' && isFinite(parseFloat(v.h))) {
-    return {h: parseFloat(v.h), src: (v.src === 'net' ? 'net' : 'manual'), at: v.at || ''};
+    var src = (v.src === 'net') ? 'net' : ((v.src === 'sheet') ? 'sheet' : 'manual');
+    return {h: parseFloat(v.h), src: src, at: v.at || ''};
   }
   if (isFinite(parseFloat(v)) && parseFloat(v) > 0) return {h: parseFloat(v), src: 'manual', at: ''};
   return null;
@@ -987,6 +997,7 @@ function clearStdForMonth(ym){
 }
 function stdSrcTxt(src){
   if (src === 'net') return '联网更新';
+  if (src === 'sheet') return '工资条（应出勤工时）';
   if (src === 'manual') return '手动填写';
   return '自动推算';
 }
@@ -1367,7 +1378,8 @@ function calcMonth(ym){
   var total = monthDays(p.y, p.m);
   var today = todayStr();
   var isCur = (ym === ymNow());
-  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, mealDays:0, absent:0, workRecords:0};
+  var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, mealDays:0,
+             absent:0, absentLeave:0, absentAuto:0, workRecords:0};
   var hasAbsent = false;
   for (var day=1; day<=total; day++){
     var ds = ym + '-' + pad2(day);
@@ -1375,7 +1387,8 @@ function calcMonth(ym){
     if (r){
       if (r.type === 'work'){ sum.normal += (+r.n||0); sum.wd += (+r.d||0); sum.we += (+r.w||0); sum.hol += (+r.h||0); sum.mealDays++; sum.workRecords++; }
       else if (r.type === 'holiday'){ sum.legalRest++; }
-      else if (r.type === 'absent'){ sum.absent++; hasAbsent = true; }
+      /* 显式「缺勤」记录 = 请假：公司口径下要扣正班工时（应出勤 − 请假） */
+      else if (r.type === 'absent'){ sum.absent++; sum.absentLeave++; hasAbsent = true; }
       continue;
     }
     /* 无打卡记录 → 自动判定：法定节假日休息 / 普通休息(周末·放假连休) / 缺勤(工作日) */
@@ -1383,23 +1396,34 @@ function calcMonth(ym){
     var c = classify(ds);
     if (c.type === 'holiday'){ sum.legalRest++; }
     else if (c.type === 'holiday_rest' || c.type === 'weekend'){ /* 普通休息，不影响工资 */ }
-    else { sum.absent++; hasAbsent = true; }
+    /* 自动判定的缺勤（漏打卡）只影响全勤奖，不扣正班工时 —— 公司实测如此 */
+    else { sum.absent++; sum.absentAuto++; hasAbsent = true; }
   }
   sum.effHours = sum.normal + sum.legalRest * 8;
   var si = stdInfo(ym);
-  var stdBase = si.baseDiv;    /* 底薪/补贴/绩效 的出勤比例分母 */
-  var stdOt   = si.otDiv;      /* 加班时薪分母 */
-  var ratio = (stdBase > 0) ? Math.min(sum.effHours / stdBase, 1) : (sum.effHours > 0 ? 1 : 0);
-  /* 时薪保留完整精度：公司是"逐项算完再四舍五入"。若先把时薪取整会累积误差
-   * （2520÷174 = 14.482759，取整成 14.48 会让 60h 加班少 0.25 元）。
-   * 注意：hourly 现在只是「正常时薪」的参考值，加班费不走它（见下方 rate1~3）。 */
+  var stdBase = si.baseDiv;    /* 应出勤工时 = 工资条 item_61 */
+  var stdOt   = si.otDiv;      /* 加班时薪分母 = 174（固定） */
+
+  /* ================= 公司工资条口径（实测反推，双向验证） =================
+   * 正班合计 item_65 = 应出勤工时 − 请假工时
+   *   实测 2026-09：应出勤 176 − 事假 4 天×8 = 144；
+   *   9/25 漏打卡但无请假记录，公司照样给正班，所以自动缺勤不参与扣减。
+   * 出勤比例 = 正班合计 ÷ 应出勤工时（不封顶） */
+  var leaveHours = sum.absentLeave * 8;
+  var attendHours = (stdBase > 0) ? Math.max(0, stdBase - leaveHours) : sum.normal;
+  var ratio = (stdBase > 0) ? (attendHours / stdBase) : 0;
   var base = baseFor(ym, S);           /* 底薪按月：该月锁定的值优先 */
   var hourly = (stdOt > 0) ? (base / stdOt) : (base / 174);
 
   var m = {};
-  m.base = money2(base * ratio);
-  m.post = money2(S.post * ratio);
-  m.perf = money2(S.perf * ratio);
+  /* 正班工资 item_71 = 基本工资 ÷ 应出勤工时 × 正班合计 */
+  m.base = money2(stdBase > 0 ? (base / stdBase * attendHours) : 0);
+  /* 奖金汇总 item_89 = (绩效 + 岗位 + 工龄) × 正班完成率 */
+  m.bonusSum = money2(((S.perf||0) + (S.post||0) + (S.senior||0)) * ratio);
+  /* 拆分明细（对照/展示用，不重复计入合计） */
+  m.perf = money2((S.perf||0) * ratio);
+  m.post = money2((S.post||0) * ratio);
+  m.senior = money2((S.senior||0) * ratio);
   m.full = hasAbsent ? 0 : money2(S.full);
   /* 三档加班时薪（元/小时）：由 otRatesFor 按 otMode 挑一套，两套互斥。
    * rate 模式 = 设置里填的固定单价；mult 模式 = 底薪 ÷ 分母 × 倍数（跟着底薪浮动）。 */
@@ -1417,13 +1441,21 @@ function calcMonth(ym){
   m.ot1 = R.m1; m.ot2 = R.m2; m.ot3 = R.m3;      /* mult 模式下的倍数（rate 模式为 0） */
   m.otRate1 = R.r1; m.otRate2 = R.r2; m.otRate3 = R.r3;
   m.otMoney = money2(otWd + otWe + otHol);
+  /* 当月应发出勤工资 item_80 = 正班工资 + 平时加班工资 + 周末加班工资 */
+  m.attend = money2(m.base + m.otMoney);
   m.meal = money2(Math.min(sum.mealDays * S.meal, S.mealCap));
+  m.other = money2(S.other || 0);
   m.social = money2(S.social);
-  /* 计税基数 = 应发（含底薪/补贴/加班/餐补，未扣社保） */
-  m.taxBase = money2(m.base + m.post + m.perf + m.full + m.otMoney + m.meal);
+  /* 应发工资 item_118 = 当月应发出勤工资 + 奖金汇总 + 全勤奖 + 其它补贴合计（餐补在内）
+   * 注意：绩效/岗位/工龄已并入「奖金汇总」，不能在这里再加一次，否则重复计薪。 */
+  m.taxBase = money2(m.attend + m.bonusSum + m.full + m.other + m.meal);
   m.tax = taxFor(m.taxBase, S);
   m.total = money2(m.taxBase - m.social - m.tax);
   m.ratio = ratio;
+  m.attendHours = attendHours;   /* 正班合计 = 工资条 item_65（应出勤 − 请假） */
+  m.leaveHours = leaveHours;     /* 请假工时：只来自显式「缺勤」记录 × 8 */
+  m.absentLeave = sum.absentLeave;
+  m.absentAuto = sum.absentAuto;
   m.baseUsed = base;        /* 该月实际使用的底薪（按月锁定值优先） */
   m.baseIsLocked = isFinite(parseFloat(getBaseMap()[ym]));
   m.stdBase = stdBase;      /* 本月标准工时 = 底薪折算分母 */
@@ -1462,28 +1494,33 @@ function refreshHome(){
 
     var otH = su.wd + su.we + su.hol;
     var inc = '';
-    inc += rowHtml('底薪（出勤比例 ' + Math.round(m.ratio*100) + '%）', fmtMoney(m.base));
-    inc += rowHtml('岗位补贴', fmtMoney(m.post));
-    inc += rowHtml('绩效奖金', fmtMoney(m.perf));
-    inc += rowHtml('全勤奖' + (su.absent>0 ? '（有缺勤→0）' : ''), fmtMoney(m.full), su.absent>0?'':'green');
-    inc += rowHtml('加班工资', fmtMoney(m.otMoney));
-    inc += rowHtml('　· 平日加班 ' + fmtH(su.wd) + 'h × ' + otNote(m, 1), fmtMoney(m.otWd), 'muted');
-    inc += rowHtml('　· 周末/假期休息日 ' + fmtH(su.we) + 'h × ' + otNote(m, 2), fmtMoney(m.otWe), 'muted');
-    inc += rowHtml('　· 法定当天 ' + fmtH(su.hol) + 'h × ' + otNote(m, 3), fmtMoney(m.otHol), 'muted');
-    inc += rowHtml('餐补（' + su.mealDays + '天 × ' + S.meal + '，上限' + S.mealCap + '）', fmtMoney(m.meal));
+    /* 与公司工资条同序：正班工资 → H1 → H2 → 出勤工资 → 奖金汇总 → 全勤 → 其它补贴 → 应发 → 扣款 → 实发 */
+    inc += rowHtml('基本工资（本月底薪）', fmtMoney(m.baseUsed));
+    inc += rowHtml('应出勤工时 / 正班合计', fmtH(m.stdBase) + ' h / ' + fmtH(m.attendHours) + ' h', 'muted');
+    inc += rowHtml('正班工资（' + fmtMoney(m.baseUsed) + ' ÷ ' + fmtH(m.stdBase) + 'h × ' + fmtH(m.attendHours) + 'h）', fmtMoney(m.base));
+    inc += rowHtml('平时加班 ' + fmtH(su.wd) + 'h × ' + otNote(m, 1), fmtMoney(m.otWd), 'muted');
+    inc += rowHtml('周末加班 ' + fmtH(su.we) + 'h × ' + otNote(m, 2), fmtMoney(m.otWe), 'muted');
+    if (su.hol > 0) inc += rowHtml('法定当天 ' + fmtH(su.hol) + 'h × ' + otNote(m, 3), fmtMoney(m.otHol), 'muted');
+    inc += rowHtml('当月应发出勤工资', fmtMoney(m.attend));
+    inc += rowHtml('奖金汇总（绩效+岗位+工龄 × ' + Math.round(m.ratio*100) + '%）', fmtMoney(m.bonusSum));
+    inc += rowHtml('　· 绩效 ' + fmtMoney(S.perf) + ' / 岗位 ' + fmtMoney(S.post)
+                 + ((S.senior||0) > 0 ? ' / 工龄 ' + fmtMoney(S.senior) : ''), fmtMoney(m.perf + m.post + m.senior), 'muted');
+    inc += rowHtml('全勤奖' + (su.absent>0 ? '（有请假/缺勤→0）' : ''), fmtMoney(m.full), su.absent>0?'':'green');
+    inc += rowHtml('其它补贴合计（餐补 ' + su.mealDays + '天×' + S.meal + '）', fmtMoney(m.other + m.meal));
     inc += rowHtml('应发工资', fmtMoney(m.taxBase));
-    inc += rowHtml('社保扣除', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
+    inc += rowHtml('个人社保', '-' + fmtMoney(Math.abs(m.social)).replace('¥',''), 'red');
     if (S.taxOn){
       var taxTag = (taxableOf(m.taxBase, S) > 3000) ? '（已超 3% 档，税率需按年表分档）' : '';
       inc += rowHtml('个税' + taxTag, '-' + fmtMoney(Math.abs(m.tax)).replace('¥',''), 'red');
     }
-    inc += rowHtml('当月总收入', fmtMoney(m.total), 'green');
+    inc += rowHtml('实发工资', fmtMoney(m.total), 'green');
     $('incomeRows').innerHTML = inc;
     var ih = '';
-    if (su.effHours === 0) ih = '无出勤工时 → 底薪类按 0 计算（法定休息或上班后会自动变化）。';
-    else if (m.ratio >= 1) ih = '出勤达到标准，底薪类全额发放。';
-    else ih = '有效出勤未满底薪折算分母 ' + m.stdBase + 'h，底薪/补贴/绩效按 ' + Math.round(m.ratio*100) + '% 发放。';
-    if (su.absent > 0) ih += '　⚠️ 有 ' + su.absent + ' 天缺勤（工作日没打卡即算），全勤奖已清零。';
+    if (m.stdBase > 0 && m.ratio >= 1) ih = '正班合计达到应出勤工时，正班工资与奖金类全额发放。';
+    else if (m.stdBase > 0) ih = '正班合计 ' + fmtH(m.attendHours) + 'h / 应出勤 ' + fmtH(m.stdBase) + 'h（' + Math.round(m.ratio*100) + '%），正班工资与奖金类按此比例发放。';
+    else ih = '本月应出勤工时未设置，正班工资按 0 处理。';
+    if (m.leaveHours > 0) ih += '　请假 ' + fmtH(m.leaveHours) + 'h（' + m.absentLeave + ' 天）已从正班工时扣除。';
+    if (su.absentAuto > 0) ih += '　另有 ' + su.absentAuto + ' 天没打卡但没有请假记录：公司口径不扣正班工时，只清零全勤奖。';
     $('incomeHint').textContent = ih;
 
     var hs = '';
@@ -2236,6 +2273,8 @@ function collectSettings(){
     full: Math.max(0, gv('sFull', 100)),
     perf: Math.max(0, gv('sPerf', 50)),
     post: Math.max(0, gv('sPost', 400)),
+    senior: Math.max(0, gv('sSenior', 0)),      /* 工龄奖：并入奖金汇总，一起按正班完成率折算 */
+    other: Math.max(0, gv('sOther', 0)),        /* 其他补贴：整额计入应发 */
     meal: Math.max(0, gv('sMeal', 15)),
     mealCap: Math.max(0, gv('sMealCap', 360)),
     /* std 已没有输入框：它只是「工作日也算不出来」时的兜底值，沿用旧值即可 */
@@ -2276,6 +2315,8 @@ function renderSettings(){
     $('sPost').value = S.post;
     $('sPerf').value = S.perf;
     $('sFull').value = S.full;
+    if ($('sSenior')) $('sSenior').value = (S.senior || 0);
+    if ($('sOther'))  $('sOther').value  = (S.other || 0);
     $('sSocial').value = S.social;
     $('sTaxOn').value = S.taxOn ? 'on' : 'off';
     $('sTaxThr').value = isFinite(S.taxThr) ? S.taxThr : 5000;
@@ -2579,6 +2620,9 @@ function resplitRecords(){
     for (var i=0;i<recs.length;i++){
       var r = recs[i];
       if (!r || !r.date || !r.type) continue;
+      /* 公司日考勤（ctlKqDetail）同步来的记录：n/d/w 是公司自己折算好的结果，
+       * 连调休补班都已在服务端算过。不能被本地节假日表重算，否则会与工资条脱节。 */
+      if (r.src === 'kqdetail') continue;
       var oldSum = (+r.n||0) + (+r.d||0) + (+r.w||0) + (+r.h||0);
       var hrs = parseFloat(r.hours);
       /* 工时缺失但已有拆分值的旧记录：不要被清零，保留原样 */
@@ -3134,16 +3178,17 @@ function hrRenderCmp(d){
   html += '<div style="padding:6px 2px;font-size:12px;color:var(--ink3);">左=网页工资条　右=本机计算（差额 = 本机 − 网页）</div>';
   /* 逐项对照：网页工资条项 vs 本机算出来的同名项 */
   var pairs = [
-    ['正班工资',   gz.item_71,  app.base],
+    ['正班工资',     gz.item_71,  app.base],
     ['平时加班工资', gz.item_72,  app.otWd],
     ['周末加班工资', gz.item_73,  app.otWe],
-    ['绩效奖金',   gz.item_83,  app.perf],
-    ['岗位津贴',   gz.item_86,  app.post],
-    ['全勤奖',     gz.item_90,  app.full],
-    ['餐补',       gz.item_191, app.meal],
-    ['个人社保',   gz.item_134, app.social],
-    ['应发工资',   gz.item_118, app.taxBase],
-    ['实发工资',   gz.item_145, app.total]
+    ['当月应发出勤工资', gz.item_80, app.attend],
+    ['奖金汇总',     gz.item_89,  app.bonusSum],
+    ['全勤奖',       gz.item_90,  app.full],
+    ['餐补',         gz.item_191, app.meal],
+    ['其它补贴合计', gz.item_99,  (app.other + app.meal)],
+    ['个人社保',     gz.item_134, app.social],
+    ['应发工资',     gz.item_118, app.taxBase],
+    ['实发工资',     gz.item_145, app.total]
   ];
   for (var i=0;i<pairs.length;i++){
     var wv = pairs[i][1];
@@ -3501,6 +3546,106 @@ function hrBuildImport(d, dates){
   return {recs: out, skipped: skipped};
 }
 
+/* =====================================================================
+ * 日考勤（ctlKqDetail）→ 本地记录      ★主数据源（不再依赖本地打卡）
+ * 公司服务端已把每天的工时算好了，字段含义（2026-08/09/10 三个月实测）：
+ *   calc_field1  = 正班工时        （工作日 8；国庆调休补班的周六也算 8）
+ *   calc_field3  = 平时加班工时    （18:00 后，正常 3）
+ *   calc_field5  = 周末/休息日加班 （整天 11）
+ *   calc_field19 = 事假工时        （2026-09：9/2、9/3、9/4、9/16 各 8h）
+ *   calc_field20 = 病假、calc_field21 = 年假（本账号暂未出现，一并按请假处理）
+ * 因此这里**不再用本地班次规则折算、也不再判断节假日/调休**——直接搬公司结果，
+ * 保证与工资条同源。整月覆盖写入：考勤一变，重读一次本地就自动对齐。
+ * ===================================================================*/
+function hrBuildFromKqDetail(ym, rows){
+  var recs = [], works = 0, leaves = 0, skipped = 0;
+  rows = rows || [];
+  for (var i=0;i<rows.length;i++){
+    var r = rows[i] || {};
+    var date = String(r.id_date || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.slice(0,7) !== ym) continue;
+    var f1 = hrNum(r.calc_field1);
+    var f3 = hrNum(r.calc_field3);
+    var f5 = hrNum(r.calc_field5);
+    var lv = hrNum(r.calc_field19) + hrNum(r.calc_field20) + hrNum(r.calc_field21);
+    if (f1 > 0 || f3 > 0 || f5 > 0){
+      recs.push({
+        date: date, type: 'work', hours: r1(f1 + f3 + f5),
+        n: r1(f1), d: r1(f3), w: r1(f5), h: 0,
+        isHoliday: 0, isWeekend: 0,
+        src: 'kqdetail', note: '日考勤同步'
+      });
+      works++;
+    } else if (lv > 0){
+      recs.push({
+        date: date, type: 'absent', hours: 0,
+        n: 0, d: 0, w: 0, h: 0,
+        isHoliday: 0, isWeekend: 0,
+        src: 'kqdetail', note: '日考勤同步：请假 ' + r1(lv) + 'h'
+      });
+      leaves++;
+    } else {
+      skipped++;   /* 全 0：休息或未出勤，不写记录 */
+    }
+  }
+  return {recs: recs, works: works, leaves: leaves, skipped: skipped};
+}
+
+/* 整月覆盖写入：先清掉该月原有记录，再写入公司日考勤结果。
+ * 「考勤有变更 → 重读一次 → 本地自动覆盖」，不会新旧混在一起。 */
+function hrSyncMonth(ym, rows){
+  var built = hrBuildFromKqDetail(ym, rows);
+  if (!built.recs.length) return {added: 0, removed: 0, built: built};
+  var old = getRecs(), recs = [], removed = 0;
+  for (var i=0;i<old.length;i++){
+    var d = String((old[i] && old[i].date) || '');
+    var tp = (old[i] && old[i].type) || '';
+    /* 该月的出勤/请假记录一律以公司为准重写；
+     * 但「法定节假日休息」是用户显式标记，不参与覆盖，保留。 */
+    if (d.slice(0,7) === ym && tp !== 'holiday'){ removed++; continue; }
+    recs.push(old[i]);
+  }
+  for (var j=0;j<built.recs.length;j++) recs.push(built.recs[j]);
+  setRecs(recs);
+  return {added: built.recs.length, removed: removed, built: built};
+}
+
+/* 工资条 → 参数自动对齐：应出勤工时（item_61）与基本工资（item_62）按工资条锁定，
+ * 这样正班工资、奖金汇总折算出来必然与工资条一致。
+ * 返回对齐说明文案（空串表示工资条没这两个字段）。 */
+function hrAlignFromGz(ym, gz){
+  if (!gz || !gz.gz_result) return '';
+  var res = gz.gz_result, done = [];
+  function nv(k){ return hrNum(res[k]); }
+  function has(k){ return res[k] !== '' && res[k] !== null && res[k] !== undefined; }
+
+  var att = nv('item_61');
+  var base = nv('item_62');
+  if (att > 0){
+    var map = getStdMap();
+    map[ym] = {h: att, src: 'sheet', at: nowStamp()};
+    setStdMap(map);
+    done.push('应出勤 ' + fmtH(att) + 'h');
+  }
+  if (base > 0){
+    var bm = getBaseMap();
+    bm[ym] = base;
+    setBaseMap(bm);
+    done.push('基本工资 ' + fmtMoney(base));
+  }
+  /* 下面这些在工资条上都是「直接给金额」的项：同步到设置后折算结果才与它一致。
+   * 工资条没给（空值）时保留原设置，避免把有效参数清成 0。 */
+  var S = getSet(), ch = [];
+  if (has('item_83')){  S.perf   = nv('item_83');  ch.push('绩效'); }
+  if (has('item_86')){  S.post   = nv('item_86');  ch.push('岗位'); }
+  if (has('item_88')){  S.senior = nv('item_88');  ch.push('工龄'); }
+  if (has('item_134')){ S.social = nv('item_134'); ch.push('社保'); }
+  if (has('item_90')){  S.full   = nv('item_90');  ch.push('全勤'); }
+  setSet(S);
+  if (ch.length) done.push(ch.join('/'));
+  return done.join('、');
+}
+
 /* ---------- 认证：唯一的登录入口，成功后 cookie 会留在会话里 ----------
  * cb(ok, msg)：ok=true 时 msg 为空；ok=false 时 msg 是服务器给的失败原因。 */
 function hrAuth(user, pass, cb){
@@ -3609,6 +3754,31 @@ function hrFetchData(ym, off, at){
     /* 顺手从考勤/打卡数据里抓工号与姓名，供 WPS 月报查询用（用户不必手填） */
     var wrows = ((rec.card && rec.card.rows) || []).concat((rec.kq && rec.kq.rows) || []);
     hrWhoFromRows(wrows, ymLabel(ym) + ' 取数');
+
+    /* ★★ 自动对齐 + 自动同步（本地不再需要手动打卡）★★
+     * 1) 工资条的「应出勤工时 / 基本工资」直接锁定成本月参数，公式才和工资条一致；
+     * 2) 日考勤的每日折算工时整月覆盖写入本地 —— 考勤一有变更，重读一次就自动同步。 */
+    var alignTxt = '', syncTxt = '';
+    try{
+      if (rec.gz && rec.gz.gz_result){
+        alignTxt = hrAlignFromGz(ym, rec.gz);
+      }
+      var krows2 = (rec.kq && rec.kq.rows) || [];
+      if (krows2.length){
+        var kr = hrMonthRange(krows2.map(function(x){ return x.id_date; }));
+        var syncYM = kr.to || ym;
+        var sr = hrSyncMonth(syncYM, krows2);
+        if (sr.added > 0){
+          resplitRecords();
+          refreshHome();
+          refreshRecords();
+          syncTxt = '日考勤已同步 ' + ymLabel(syncYM) + '：覆盖旧记录 ' + sr.removed + ' 条 → 写入 ' + sr.added
+                  + ' 条（出勤 ' + sr.built.works + ' 天'
+                  + (sr.built.leaves ? '、请假 ' + sr.built.leaves + ' 天' : '') + '）';
+        }
+      }
+    }catch(e){}
+
     hrBusy(false, '');
     /* 从记录页点「从HR导入打卡」进来的：若本月没有可导入的打卡
      * （当月常常只有 1 天、甚至一条卡都没打），自动再取上月一次，
@@ -3630,7 +3800,7 @@ function hrFetchData(ym, off, at){
       _hrWantImport = false;
     }
     hrRender();
-    hrAfterToast(rec, ym);
+    hrAfterToast(rec, ym, alignTxt, syncTxt);
   };
 
   /* 工资条：始终请求，失败信息照样记下来给人看 */
@@ -3661,12 +3831,15 @@ function hrFetchData(ym, off, at){
 }
 
 /* 取数完成后的提示：把「工资条」「考勤/打卡」两个来源分别说清楚 */
-function hrAfterToast(rec, ym){
+function hrAfterToast(rec, ym, alignTxt, syncTxt){
   var gzTxt = rec.gz ? '工资条已取到' : ('无工资条（' + (rec.gzMsg || '未返回') + '）');
   var attTxt;
   if (rec.attOut) attTxt = '考勤/打卡越界未查（只有本月/上月）';
   else attTxt = '打卡 ' + ((rec.card && rec.card.rows) ? rec.card.rows.length : 0) + ' 天';
-  toast(ymLabel(ym) + '：' + gzTxt + '；' + attTxt);
+  var msg = ymLabel(ym) + '：' + gzTxt + '；' + attTxt;
+  if (alignTxt) msg += '；参数已按工资条对齐（' + alignTxt + '）';
+  if (syncTxt) msg += '；' + syncTxt;
+  toast(msg);
 }
 
 function boot(){
