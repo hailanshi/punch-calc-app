@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.4</title>
+<title>打卡工资计算器 v2.5</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -271,68 +271,6 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
   </section>
 
   <!-- ==================== 打卡 / 记录编辑器 ==================== -->
-  <section id="page-punch" class="page">
-    <header class="topbar">
-      <button type="button" class="btnText" id="punchBackBtn" onclick="window.punchBack()">‹ 首页</button>
-      <div class="title" id="punchTitle">上班打卡</div>
-      <span style="width:52px;"></span>
-    </header>
-    <div class="scroll">
-      <div class="card pad">
-        <div class="field">
-          <label>日期</label>
-          <input type="date" id="pDate" onchange="window.punchChanged()">
-          <div style="margin-top:7px;"><span class="pill" id="pCat">--</span> <span style="font-size:12px;color:var(--ink3);" id="pCatNote"></span></div>
-        </div>
-        <div class="field">
-          <label>打卡类型</label>
-          <div class="typeRow" id="typeRow">
-            <button type="button" class="typeItem" data-t="work" onclick="window.pickType('work')">
-              <div class="nm">上班打卡</div>
-              <div class="ds">录入工时</div>
-            </button>
-            <button type="button" class="typeItem" data-t="absent" onclick="window.pickType('absent')">
-              <div class="nm">缺勤</div>
-              <div class="ds">全勤奖清零</div>
-            </button>
-          </div>
-          <div style="margin-top:8px;background:var(--soft2);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink2);">
-            选「缺勤」可不填工时，直接记录当天缺勤；法定节假日休息 / 普通休息 仍按当天日期自动判定。
-          </div>
-        </div>
-        <div class="field" id="hoursField">
-          <label>上班工时（小时）</label>
-          <input type="number" id="pHours" min="0" max="24" step="0.5" value="8" onchange="window.punchChanged()" oninput="window.punchChanged()">
-          <div class="chips" style="margin-top:6px;" id="quickHours">
-            <button type="button" class="chip" onclick="window.setHours(8)">8</button>
-            <button type="button" class="chip" onclick="window.setHours(10)">10</button>
-            <button type="button" class="chip" onclick="window.setHours(11)">11</button>
-            <button type="button" class="chip" onclick="window.setHours(12)">12</button>
-          </div>
-        </div>
-        <div class="preview" id="pPreview" style="background:var(--soft2);border-radius:12px;padding:9px 11px;font-size:13px;color:var(--ink2);margin-bottom:12px;"></div>
-        <div class="field">
-          <label>备注（可选）</label>
-          <input type="text" id="pNote" maxlength="60" placeholder="例如：加班赶项目">
-        </div>
-        <button type="button" class="btn main block" id="savePunchBtn" onclick="window.savePunch()">保存打卡</button>
-      </div>
-
-      <div class="card pad">
-        <div style="font-weight:700;font-size:15px;margin-bottom:4px;">自动补卡</div>
-        <div style="font-size:12px;color:var(--ink3);margin-bottom:8px;">选择要补的月份，再点按钮；跳过周末、法定节假日和已有记录的日期，点击直接执行。</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <select id="bfYear" onchange="window.bfYearChange()" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;-webkit-appearance:none;color:var(--ink);"></select>
-          <select id="bfMonth" onchange="window.bfYearChange()" style="flex:1;border:1px solid var(--line);border-radius:12px;background:var(--soft2);padding:10px;font-size:14px;-webkit-appearance:none;color:var(--ink);"></select>
-        </div>
-        <div class="hint" style="margin-bottom:8px;" id="bfHint">—</div>
-        <div class="hint" style="margin-bottom:10px;">默认工时 <span id="autoHrInfo">11</span> 小时（8正常 + 3平日加班）· 该月标准工时按「该月工作日×8」自动算，联网更新可校正。</div>
-        <button type="button" class="btn soft block" style="margin-bottom:8px;" onclick="window.backfillToday()">① 补卡到这个月（到今日）</button>
-        <button type="button" class="btn soft block" onclick="window.backfillAll()">② 补卡整个月</button>
-      </div>
-    </div>
-  </section>
-
   <!-- ==================== 记录管理 ==================== -->
   <section id="page-records" class="page">
     <header class="topbar">
@@ -473,7 +411,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
           <input type="password" id="hrPass" autocomplete="off" placeholder="请输入密码">
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:12px 2px;">
-          <input type="checkbox" id="hrRemember" style="width:17px;height:17px;">
+          <input type="checkbox" id="hrRemember" style="width:17px;height:17px;" checked>
           <span>保存登录（下次自动填好，不用再输）</span>
         </label>
         <button type="button" class="btn main block" id="hrLoginBtn" onclick="window.hrLogin()">登录</button>
@@ -652,7 +590,6 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
   <!-- ==================== 底部导航 ==================== -->
   <nav class="bottomNav" id="bottomNav">
-    <button type="button" class="navItem" data-p="punch" onclick="window.navTo('punch')"><span class="ic">⏰</span>打卡</button>
     <button type="button" class="navItem" data-p="home" onclick="window.navTo('home')"><span class="ic">🏠</span>首页</button>
     <button type="button" class="navItem" data-p="records" onclick="window.navTo('records')"><span class="ic">📒</span>记录</button>
     <button type="button" class="navItem" data-p="hr" onclick="window.navTo('hr')"><span class="ic">🏢</span>公司</button>
@@ -715,8 +652,9 @@ var LS_CUS  = 'punchSalaryCustomHolidays_v1';
 var LS_THEME= 'punchSalaryTheme_v1';
 var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYYY-MM:h}
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
+var LS_KQCOVER = 'punchSalaryKqCover_v1'; // 每月考勤数据覆盖到的最后一天 {YYYY-MM:YYYY-MM-DD}
 
-var APP_VER = '2.4';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.5';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   /* ===== 公司工资条口径：只有这些参数 ===== */
@@ -911,6 +849,20 @@ function stdSrcTxt(src){
 /* 底薪按月：某月单独锁定的值优先，否则用设置里的全局底薪。
  * 这样调薪后回头看历史月份不会被改写（如 8月2520、9月起2700）。 */
 function getBaseMap(){ var m = storeGet(LS_BASE, {}); return m && typeof m === 'object' ? m : {}; }
+/* 考勤数据覆盖到哪天：只有这个日期之前的缺勤才算「漏卡」，之后是公司还没给数据 */
+function getKqCoverTo(ym){
+  var m = storeGet(LS_KQCOVER, {});
+  if (!m || typeof m !== 'object') return '';
+  var v = m[ym];
+  return (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : '';
+}
+function setKqCoverTo(ym, date){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return;
+  var m = storeGet(LS_KQCOVER, {});
+  if (!m || typeof m !== 'object') m = {};
+  if (!m[ym] || String(date) > m[ym]) m[ym] = String(date);
+  storeSet(LS_KQCOVER, m);
+}
 function setBaseMap(m){ storeSet(LS_BASE, m); }
 function baseFor(ym, S){
   var m = getBaseMap();
@@ -1089,22 +1041,16 @@ function ymNow(){ var d = new Date(); return d.getFullYear() + '-' + pad2(d.getM
 
 function showPage(name){
   /* 离开打卡页即取消未完成的“编辑”状态，避免残留到下次进入 */
-  if (name !== 'punch' && _editDate){ _editDate = ''; _manualType = false; }
-  var pages = ['home','punch','records','settings','holidays','help','hr'];
+    var pages = ['home','records','settings','help','hr'];
   for (var i=0;i<pages.length;i++){
     var el = $('page-' + pages[i]);
     if (el) el.className = 'page' + (pages[i]===name ? ' on' : '');
   }
-  var navPages = ['home','punch','records','hr','settings'];
+  var navPages = ['home','records','hr','settings'];
   var nav = $('bottomNav');
   if (nav) nav.style.display = (navPages.indexOf(name) >= 0) ? 'flex' : 'none';
   _curPage = name;
   if (name==='home'){ refreshHome(); }
-  if (name==='punch'){
-    /* 新开一条打卡时把类型复位成「上班打卡」，避免上一轮的「缺勤」被沿用误存 */
-    if (!_editDate){ _manualType = true; _curType = 'work'; pickTypeUI(_curType); }
-    bfPopulate();
-  }
   if (name==='records'){ refreshRecords(); }
   if (name==='settings'){ renderSettings(); }
   if (name==='holidays'){ renderHolidays(); }
@@ -1112,7 +1058,7 @@ function showPage(name){
   syncNav();
 }
 function syncNav(){
-  var navPages = ['home','punch','records','hr','settings'];
+  var navPages = ['home','records','hr','settings'];
   var items = document.querySelectorAll('#bottomNav .navItem');
   for (var i=0;i<items.length;i++){
     var on = items[i].getAttribute('data-p') === _curPage;
@@ -1121,13 +1067,9 @@ function syncNav(){
   var rc = $('recCountTop'); if (rc) rc.textContent = getRecs().length;
 }
 function navTo(p){
-  if (p === 'punch'){
-    if (_editDate){ /* 已在编辑中则保留 */ } else { resetPunchForm(); }
-  }
   showPage(p);
 }
 function showHome(){ navTo('home'); }
-function showPunch(){ navTo('punch'); }
 function showRecords(){ navTo('records'); }
 function showSettings(){ navTo('settings'); }
 function showHelp(){ showPage('help'); }
@@ -1266,12 +1208,16 @@ function stdHoursElapsed(ym, stdFull){
   if (_freezeMonthEnd) return stdFull;
   if (ym !== ymNow()) return stdFull;      /* 历史月份已经结算完 */
   var today = todayStr();
+  /* 考勤只覆盖到某天时以那天为界：之后的应出勤还没发生/还没同步，不能算成已出勤 */
+  var coverTo = getKqCoverTo(ym);
+  var cut = today;
+  if (coverTo && coverTo < cut) cut = coverTo;
   var p = ymParts(ym);
   var total = monthDays(p.y, p.m);
   var n = 0;
   for (var day=1; day<=total; day++){
     var ds = ym + '-' + pad2(day);
-    if (ds > today) break;
+    if (ds > cut) break;
     if (classify(ds).type === 'workday') n++;
   }
   var h = n * 8;
@@ -1287,8 +1233,11 @@ function calcMonth(ym){
   var today = todayStr();
   var isCur = (ym === ymNow());
   var sum = {normal:0, wd:0, we:0, hol:0, legalRest:0, mealDays:0,
-             absent:0, absentLeave:0, absentAuto:0, workRecords:0, leaveHours:0};
+             absent:0, absentLeave:0, absentAuto:0, absentPaid:0,
+             workRecords:0, leaveHours:0, deductLeave:0};
   var hasAbsent = false;
+  /* 考勤数据覆盖到的最后一天：这天之后的日期公司还没给记录，不能判「漏卡」 */
+  var kqCoverTo = getKqCoverTo(ym);
   for (var day=1; day<=total; day++){
     var ds = ym + '-' + pad2(day);
     var r = recMap[ds];
@@ -1298,11 +1247,20 @@ function calcMonth(ym){
       /* 显式「缺勤」记录 = 请假，扣正班工时。
        * 但只扣「落在应出勤工作日」的那些：10/7 的婚假落在国庆假期里，
        * 那天本来就没算进应出勤，再扣就是重复扣。 */
+      /* 请假：只有「扣钱」的假（事假）才扣正班工时、清全勤。
+       * 婚假 / 年假等带薪假只做记录，不影响工资 —— 旧记录没有 deduct 字段时按事假处理。
+       * 另外只扣落在应出勤工作日的部分：10/7 的婚假落在国庆假期内，本来就没算进应出勤。 */
       else if (r.type === 'absent'){
         sum.absent++;
-        if (classify(ds).type === 'workday'){
-          sum.absentLeave++;
-          sum.leaveHours += isFinite(+r.leave) && (+r.leave) > 0 ? (+r.leave) : 8;
+        var isDeduct = (r.deduct !== false);
+        if (isDeduct){
+          sum.deductLeave++;
+          if (classify(ds).type === 'workday'){
+            sum.absentLeave++;
+            sum.leaveHours += isFinite(+r.leave) && (+r.leave) > 0 ? (+r.leave) : 8;
+          }
+        } else {
+          sum.absentPaid++;    /* 婚假 / 年假等带薪假：只记录，不扣钱 */
         }
         hasAbsent = true;
       }
@@ -1310,6 +1268,8 @@ function calcMonth(ym){
     }
     /* 无打卡记录 → 自动判定：法定节假日休息 / 普通休息(周末·放假连休) / 缺勤(工作日) */
     if (isCur && ds > today) continue;   // 当月未来日子先不算缺勤
+    /* 考勤数据还没覆盖到的日子（今天还没同步 / 还没到）也不算漏卡 */
+    if (kqCoverTo && ds > kqCoverTo) continue;
     var c = classify(ds);
     if (c.type === 'holiday'){ sum.legalRest++; }
     else if (c.type === 'holiday_rest' || c.type === 'weekend'){ /* 普通休息，不影响工资 */ }
@@ -1345,7 +1305,7 @@ function calcMonth(ym){
   m.senior = money2((S.senior||0) * ratio);
   /* 全勤奖：只有「请假」才清零。漏打卡公司视为正常出勤（2026-09-25 漏卡仍给正班，
    * 全勤奖只因 9/2、3、4、16 的事假而清零），所以自动判定的漏卡不扣全勤。 */
-  m.full = (sum.absentLeave > 0) ? 0 : money2(S.full);
+  m.full = (sum.deductLeave > 0) ? 0 : money2(S.full);
   /* 三档加班时薪（元/小时）：统一由 otRatesFor 给出（公司工资条口径）。
    * rate 模式 = 设置里填的固定单价；mult 模式 = 底薪 ÷ 分母 × 倍数（跟着底薪浮动）。 */
   var R = otRatesFor(ym, S);
@@ -1409,7 +1369,8 @@ function refreshHome(){
     var su = m.sum;
     var dayNoun = '（本月尚未打卡，可用「补卡」快速补齐）';
     var sumTxt = '上班 ' + su.workRecords + ' 天';
-    if (su.absentLeave > 0) sumTxt += ' · 请假 ' + su.absentLeave + ' 天';
+    if (su.absentPaid > 0) sumTxt += ' · 带薪假 ' + su.absentPaid + ' 天（婚假/年假等，不扣钱）';
+    if (su.absentLeave > 0) sumTxt += ' · 事假 ' + su.absentLeave + ' 天（扣钱）';
     if (su.absentAuto > 0) sumTxt += ' · 漏卡 ' + su.absentAuto + ' 天（公司照样算出勤）';
     sumTxt += '<br>应出勤 ' + fmtH(m.stdBase) + 'h · 正班合计 ' + fmtH(m.attendHours) + 'h';
     if (m.stdElapsed < m.stdBase) sumTxt += '（截至今日已发生 ' + fmtH(m.stdElapsed) + 'h）';
@@ -1451,7 +1412,8 @@ function refreshHome(){
     else ih = '本月应出勤工时未设置，正班工资按 0 处理。';
     if (m.stdElapsed < m.stdBase) ih += '　本月还没过完：正班只算到今天为止已经发生的 ' + fmtH(m.stdElapsed) + 'h，剩余工作日到点后自动补上。';
     if (m.leaveHours > 0) ih += '　请假 ' + fmtH(m.leaveHours) + 'h 已从正班工时扣除。';
-    if (su.absentAuto > 0) ih += '　另有 ' + su.absentAuto + ' 天没打卡但没有请假记录：公司口径不扣正班工时，只清零全勤奖。';
+    if (su.absentAuto > 0) ih += '　另有 ' + su.absentAuto + ' 天没有考勤记录：公司口径不扣正班工时。';
+    if (su.absentPaid > 0) ih += '　带薪假 ' + su.absentPaid + ' 天（婚假/年假等）不扣工资，也不影响全勤。';
     $('incomeHint').textContent = ih;
 
     var hs = '';
@@ -1543,135 +1505,6 @@ function recShiftMonth(delta){
   refreshRecords();
 }
 
-/* ---------------- 打卡表单 ---------------- */
-var _editDate = '';   // 编辑中记录的原始日期，空 = 新建
-var _manualType = false; // 用户是否手动选定类型（手动后改日期不再自动切换）
-var _curType = 'work';
-var _pendingRec = null; // 打卡覆盖确认的草稿（普通对象，非闭包）
-
-function autoSuggestType(dateStr){
-  var c = classify(dateStr).type;
-  if (c === 'holiday') return 'holiday';
-  if (c === 'weekend') return 'rest';
-  return 'work';
-}
-function punchCatText(dateStr){
-  var c = classify(dateStr);
-  var R = otRatesFor(String(dateStr).substring(0,7));
-  if (c.type === 'holiday') return (c.custom ? '自定义·节假日加班档' : '法定节假日') + '(' + otNote(R, 3) + ') · ' + c.name;
-  if (c.type === 'holiday_rest') return '放假连休日(' + otNote(R, 2) + ') · ' + c.name;
-  if (c.type === 'weekend') return (c.custom ? '自定义·周末加班档' : '周末') + '(' + otNote(R, 2) + ')' + (c.name ? ' · ' + c.name : '');
-  return '工作日(平日加班 ' + otNote(R, 1) + ')';
-}
-/* 保存按钮文案跟着类型走：缺勤不需要填工时，动词也改掉，避免误存 */
-function punchSaveLabel(type){
-  try{
-    var btn = $('savePunchBtn'); if (!btn) return;
-    var t = TYPE_META[type] ? type : _curType;
-    btn.textContent = _editDate ? '保存修改' : (t === 'absent' ? '记录缺勤' : '保存打卡');
-  }catch(e){}
-}
-function resetPunchForm(keepDate){
-  _editDate = '';
-  _manualType = true;   // 只保留“上班打卡”，不自动切换类型
-  var t = keepDate || todayStr();
-  var dEl = $('pDate'); if (dEl) dEl.value = t;
-  $('pNote').value = '';
-  $('pHours').value = 8;
-  _curType = 'work';
-  $('punchTitle').textContent = '上班打卡';
-  var bb = $('punchBackBtn'); if (bb) bb.textContent = '‹ 首页';
-  
-  pickTypeUI(_curType);   /* 放在最后：它负责高亮类型按钮 + 刷新保存按钮文案 */
-  punchChanged();
-}
-function editRecord(dateStr){
-  try{
-    var r = recByDate(dateStr);
-    if (!r){ toast('未找到该记录', 'bad'); return; }
-    _editDate = r.date;
-    _manualType = true;   // 编辑时保持原类型，不因日期变化自动切换
-    $('pDate').value = r.date;
-    $('pNote').value = r.note || '';
-    $('pHours').value = r.hours || (r.type==='work'?8:0);
-    _curType = r.type;
-    $('punchTitle').textContent = '编辑记录';
-    var bb = $('punchBackBtn'); if (bb) bb.textContent = '‹ 返回记录';
-    pickTypeUI(_curType);
-    showPage('punch');
-    punchChanged();
-    toast('正在编辑 ' + dateStr + ' 的记录');
-  }catch(e){ toast('无法编辑：' + (e&&e.message?e.message:e), 'bad'); }
-}
-function pickType(t){
-  _manualType = true;
-  _curType = TYPE_META[t] ? t : 'work';
-  pickTypeUI(_curType);
-  punchChanged();
-}
-function pickTypeUI(t){
-  try{
-    var row = $('typeRow');
-    if (row){
-      var btns = row.querySelectorAll('.typeItem');
-      for (var i=0;i<btns.length;i++){
-        btns[i].className = 'typeItem' + (btns[i].getAttribute('data-t')===t ? ' on' : '');
-      }
-    }
-    var hf = $('hoursField');
-    if (hf) hf.style.display = (t==='work') ? 'block' : 'none';
-    punchSaveLabel(t);
-  }catch(e){}
-}
-function setHours(v){
-  $('pHours').value = v;
-  punchChanged();
-}
-function punchChanged(){
-  try{
-    var ds = $('pDate').value;
-    if (!ds) return;
-    var R = otRatesFor(ds.substring(0,7));
-    var n1 = otNote(R, 1), n2 = otNote(R, 2), n3 = otNote(R, 3);
-    var c = classify(ds);
-    $('pCat').textContent = punchCatText(ds);
-    var note = '';
-    if (c.type==='holiday') note = c.custom
-      ? '当天为自定义节假日（节假日加班档）：上班全部计节假日加班（' + n3 + '）'
-      : '当天为法定节假日：上班全部计节假日加班（' + n3 + '）';
-    else if (c.type==='holiday_rest') note = '当天为放假连休日（非法定）：上班按休息日计周末加班（' + n2 + '），不计正常出勤';
-    else if (c.type==='weekend') note = (c.custom ? '当天为自定义休息日（周末加班档）' : '当天为周末') + '：上班全部计周末加班（' + n2 + '），不计正常出勤';
-    else note = '当天为工作日：8h 内计正常出勤，超出部分计平日加班（' + n1 + '）';
-    $('pCatNote').textContent = note;
-    var hours = parseFloat(($('pHours').value || '0').toString().replace(',', '.'));
-    var pv = $('pPreview');
-    if (_curType === 'work' && hours > 0){
-      var sp = splitHours(ds, 'work', hours);
-      var parts = [];
-      if (sp.n>0) parts.push('正常出勤 ' + fmtH(sp.n) + 'h');
-      if (sp.d>0) parts.push('平日加班 ' + fmtH(sp.d) + 'h（' + n1 + '）');
-      if (sp.w>0) parts.push((c.type==='holiday_rest'?'休息日加班 ':'周末加班 ') + fmtH(sp.w) + 'h（' + n2 + '）');
-      if (sp.h>0) parts.push('节假日加班 ' + fmtH(sp.h) + 'h（' + n3 + '）');
-      var otPay = money2(sp.d*R.r1 + sp.w*R.r2 + sp.h*R.r3);
-      pv.textContent = '将记入：' + (parts.length?parts.join(' + '):'0h（请确认工时）')
-        + (otPay > 0 ? '　→ 加班费 ' + fmtMoney(otPay) : '');
-    } else if (_curType === 'holiday'){
-      pv.textContent = '法定节假日休息：按 8h 计入有效出勤，享有底薪（比例按底薪折算），不影响全勤。';
-    } else if (_curType === 'rest'){
-      pv.textContent = '普通休息：无底薪、不影响全勤奖（此天不产生工时）。';
-    } else {
-      var tag = '';
-      if (c.type === 'holiday') tag = '　（该日属节假日，记为缺勤同样清零全勤奖）';
-      else if (c.type === 'weekend' || c.type === 'holiday_rest') tag = '　（该日属休息日，记为缺勤同样清零全勤奖）';
-      pv.textContent = '缺勤：无底薪、当月全勤奖清零，不需要填工时。' + tag;
-    }
-  }catch(e){}
-}
-function recByDate(dateStr){
-  var recs = getRecs();
-  for (var i=0;i<recs.length;i++){ if (recs[i].date === dateStr) return recs[i]; }
-  return null;
-}
 function buildRec(ds, type, hours, note, flags){
   var sp = splitHours(ds, type, hours);
   var c = classify(ds);
@@ -1681,148 +1514,6 @@ function buildRec(ds, type, hours, note, flags){
     isHoliday: (isHoliDate(ds)?1:0), isWeekend: (isWeekend(ds)?1:0),
     note: note || ''
   };
-}
-function savePunch(){
-  try{
-    var ds = $('pDate').value;
-    if (!ds){ toast('请先选择日期', 'bad'); return; }
-    var hours = 0;
-    if (_curType === 'work'){
-      hours = parseFloat(($('pHours').value || '').toString().replace(',', '.'));
-      if (!isFinite(hours) || hours <= 0){ toast('请输入有效的上班工时', 'bad'); return; }
-      if (hours > 24){ hours = 24; }
-    }
-    var note = ($('pNote').value || '').trim();
-    var rec = buildRec(ds, _curType, hours, note);
-
-    var exist = recByDate(ds);
-    var overwriteConflict = false;
-    if (exist && _editDate !== ds) overwriteConflict = true;   // 新建时撞已有，或改到已有日期
-    if (!overwriteConflict){
-      doCommitPunch(rec);
-    } else {
-      var lbl = TYPE_META[exist.type] ? TYPE_META[exist.type].short : exist.type;
-      _pendingRec = rec;   // 草稿存入全局，确认按钮只触发无参回调，避免闭包丢失
-      askConfirm('已有记录', '日期 ' + ds + ' 已存在一条记录（' + lbl + '）。保存将覆盖它，确定继续吗？', 'doCommitPunchConfirmed', null);
-    }
-  }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
-}
-function doCommitPunchConfirmed(){
-  try{
-    var rec = _pendingRec;
-    _pendingRec = null;
-    if (!rec){ toast('草稿已失效，请重试', 'bad'); return; }
-    doCommitPunch(rec);
-  }catch(e){ toast('保存失败：' + (e&&e.message?e.message:e), 'bad'); }
-}
-function doCommitPunch(rec){
-  try{
-    var recs = getRecs();
-    var list = [];
-    var replaced = false;
-    for (var i=0;i<recs.length;i++){
-      if (recs[i].date === _editDate) continue;                 // 移除原记录（编辑改期）
-      if (recs[i].date === rec.date){ replaced = true; continue; } // 覆盖同日期
-      list.push(recs[i]);
-    }
-    list.push(rec);
-    setRecs(list);
-    var wasEdit = !!_editDate;
-    _editDate = '';
-    toast('已' + (wasEdit ? '保存修改' : '记录打卡') + '：' + rec.date + ' ' + TYPE_META[rec.type].t + (replaced?'（覆盖）':''));
-    var m = rec.date.substring(0,7);
-    if (m !== _curYM){ _curYM = m; }
-    if (wasEdit){
-      showPage('records');          // 从记录页进来的，改完回记录页
-    } else {
-      /* 保存后留在打卡页，方便接着录下一天；日期保持在刚存的那天便于核对 */
-      resetPunchForm(rec.date);
-      showPage('punch');
-      punchChanged();
-    }
-    refreshHome();                  // 无论停在哪一页，首页统计都同步刷新
-  }catch(e){ toast('写入失败：' + (e&&e.message?e.message:e), 'bad'); }
-}
-function punchBack(){
-  if (_editDate){ _editDate=''; resetPunchForm(); showPage('records'); }
-  else showPage('home');
-}
-function cancelPunch(){ _editDate=''; resetPunchForm(); }
-
-/* ---------------- 补卡（无确认，直接执行 + toast） ---------------- */
-var _bfYM = '';   // 补卡选定的月份 YYYY-MM
-function bfPopulate(){
-  var y = $('bfYear'), m = $('bfMonth');
-  if (!y || !m) return;
-  if (!y.options.length){
-    for (var i=2024; i<=2035; i++){ var o = document.createElement('option'); o.value = i; o.textContent = i + '年'; y.appendChild(o); }
-  }
-  if (!m.options.length){
-    for (var j=1; j<=12; j++){ var o2 = document.createElement('option'); o2.value = j; o2.textContent = j + '月'; m.appendChild(o2); }
-  }
-  var now = ymNow(), p = ymParts(now);
-  y.value = p.y; m.value = p.m;
-  bfYearChange();
-}
-function bfReadYM(){
-  var y = $('bfYear'), m = $('bfMonth');
-  if (!y || !m) return '';
-  var mm = (m.value.length < 2 ? ('0' + m.value) : String(m.value));
-  _bfYM = (+y.value) + '-' + mm;
-  return _bfYM;
-}
-function bfYearChange(){
-  var ym = bfReadYM();
-  var hi = $('bfHint');
-  if (hi && ym){
-    var wd = offlineWorkdays(ym);
-    var si = stdInfo(ym);
-    hi.textContent = ymLabel(ym) + '：工作日约 ' + wd + ' 天 → 当月排班 ' + (wd * 8) + 'h（底薪折算分母）';
-  }
-}
-function backfillBase(ym, uptoToday){
-  if (!ym) ym = ymNow();
-  var S = getSet();
-  var defH = (S.auto > 0) ? S.auto : 11;
-  var p = ymParts(ym);
-  var now = ymNow();
-  var isCur = (ym === now);
-  var today = todayStr();
-  var end = monthDays(p.y, p.m);
-  if (uptoToday && isCur) end = parseInt(today.split('-')[2], 10);
-  var recs = getRecs();
-  var map = {};
-  for (var i=0;i<recs.length;i++){ map[recs[i].date] = true; }
-  var succ=0, skip=0, fail=0;
-  for (var day=1; day<=end; day++){
-    var ds = ym + '-' + pad2(day);
-    if (uptoToday && isCur && ds > today) break;
-    try{
-      var c = classify(ds);
-      if (c.type === 'holiday' || c.type === 'holiday_rest' || c.type === 'weekend'){ skip++; continue; }
-      if (map[ds]){ skip++; continue; }
-      var rec = buildRec(ds, 'work', defH, '自动补卡');
-      map[ds] = true;
-      recs.push(rec);
-      succ++;
-    }catch(e){ fail++; }
-  }
-  setRecs(recs);
-  if (_curYM !== ym){ _curYM = ym; }
-  toast('补卡完成：成功 ' + succ + ' 条，跳过 ' + skip + ' 条，失败 ' + fail + ' 条', succ>0?'good':'');
-  showPage('home');
-}
-function backfillToday(){
-  try{
-    var ym = bfReadYM() || ymNow();
-    backfillBase(ym, true);
-  }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
-}
-function backfillAll(){
-  try{
-    var ym = bfReadYM() || ymNow();
-    backfillBase(ym, false);
-  }catch(e){ toast('补卡失败：' + (e&&e.message?e.message:e), 'bad'); }
 }
 
 /* ---------------- 记录管理 ---------------- */
@@ -1836,7 +1527,7 @@ function refreshRecords(){
     $('recSummary').textContent = '共 ' + month.length + ' 条 · 全部 ' + recs.length + ' 条';
     var html = '';
     if (!month.length){
-      html = '<div class="card pad" style="text-align:center;color:var(--ink3);font-size:13px;">本月暂无打卡记录<br>可在「打卡」页补录或使用自动补卡</div>';
+      html = '<div class="card pad" style="text-align:center;color:var(--ink3);font-size:13px;">本月暂无记录<br>点「同步公司日考勤」从公司考勤读取</div>';
     }
     for (var j=0;j<month.length;j++){
       html += recRowHtml(month[j]);
@@ -1870,8 +1561,7 @@ function recRowHtml(r){
     '<span class="badge ' + meta.badge + '">' + meta.short + '</span></div>' +
     '<div class="sub">' + sub + '</div>' +
     '<div class="ops">' +
-    '<button type="button" class="opBtn" onclick="window.editRecord(\'' + r.date + '\')">编辑</button>' +
-    '<button type="button" class="opBtn del" onclick="window.askDeleteRecord(\'' + r.date + '\')">删除</button>' +
+        '<button type="button" class="opBtn del" onclick="window.askDeleteRecord(\'' + r.date + '\')">删除</button>' +
     '</div></div>';
 }
 function askDeleteRecord(dateStr){
@@ -2439,6 +2129,15 @@ function hrResetLoginFields(){
   if (pass) pass.value = '';
 }
 /* 登录卡 / 数据卡切换 */
+/* 启动时：本机存过账号就直接登录并读取，否则显示登录页（首次手输） */
+function hrAutoStart(){
+  try{
+    var o = storeGet(LS_HRACCT, null);
+    if (!o || typeof o !== 'object' || !o.u || !o.p){ hrShowLogin(); return; }
+    hrLoadAcct();
+    hrLogin(true);
+  }catch(e){ hrShowLogin(); }
+}
 function hrShowLogin(){
   var a = $('hrLoginCard'), b = $('hrDataWrap');
   if (a) a.style.display = '';
@@ -2452,16 +2151,32 @@ function hrShowData(){
 /* 「登录」：校验输入 → 真的向服务器登录一次，**成功后才进数据页**。
  * 以前是「有输入就直接切到数据页」，服务器说密码不对时人已经进了数据页、
  * 登录框被隐藏，没法重登 —— 现在一律以服务器返回为准。 */
-function hrLogin(){
-  var user = ($('hrUser') && $('hrUser').value || '').replace(/^\s+|\s+$/g, '');
-  var pass = ($('hrPass') && $('hrPass').value) || '';
-  var rem  = !!($('hrRemember') && $('hrRemember').checked);
+function hrLogin(silent){
+  /* silent=true：启动时用本机保存的账号自动登录，不打扰用户 */
+  var user, pass, rem;
+  if (silent){
+    var o = storeGet(LS_HRACCT, null) || {};
+    user = String(o.u || '').replace(/^\s+|\s+$/g, '');
+    pass = String(o.p || '');
+    rem = true;
+  } else {
+    user = ($('hrUser') && $('hrUser').value || '').replace(/^\s+|\s+$/g, '');
+    pass = ($('hrPass') && $('hrPass').value) || '';
+    rem  = !!($('hrRemember') && $('hrRemember').checked);
+  }
   var h = $('hrLoginHint');
   var btn = $('hrLoginBtn');
-  if (!user){ if (h) h.textContent = '请输入账号'; return; }
-  if (!pass){ if (h) h.textContent = '请输入密码'; return; }
-  if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
-  if (h) h.textContent = '正在登录…';
+  if (!user || !pass){
+    if (!silent){
+      if (h) h.textContent = !user ? '请输入账号' : '请输入密码';
+    }
+    hrShowLogin();
+    return;
+  }
+  if (!silent){
+    if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
+    if (h) h.textContent = '正在登录…';
+  }
 
   hrAuth(user, pass, function(ok, msg){
     if (btn){ btn.disabled = false; btn.textContent = '登录'; }
@@ -2470,10 +2185,11 @@ function hrLogin(){
       _hrSessionOk = false;
       _hrLoggedIn  = false;
       _hrAcct = ''; _hrPwd = '';
-      hrClearAcct();                       /* 存错的密码不要留着 */
+      if (!silent) hrClearAcct();          /* 手输错了才清；自动登录失败先保留，方便改 */
       hrShowLogin();
-      if (h) h.innerHTML = '<b style="color:var(--danger);">登录失败：' + esc(msg || '账号或密码不正确') + '</b>';
-      toast('登录失败，请重新输入');
+      if (h) h.innerHTML = '<b style="color:var(--danger);">'
+        + (silent ? '自动登录失败：' : '登录失败：') + esc(msg || '账号或密码不正确') + '</b>';
+      if (!silent) toast('登录失败，请重新输入');
       return;
     }
     /* 登录成功：这次会话有效 */
@@ -3206,10 +2922,15 @@ function hrBuildImport(d, dates){
  * ===================================================================*/
 /* 日考勤里的「假期工时」字段（2026-08/09/10 三个月实测 + 工资条反推确认）：
  *   19=事假  20=病假  21=年假  24=婚假
- * 其余 calc_field 在本账号尚未出现过非零值；一旦出现会写进 note 提示人工核对，
- * 不会默默忽略 —— 公司有什么数据就同步什么。 */
+ * 第三列 = 是否扣钱：**只有事假扣正班工时、清全勤**。
+ * 婚假 / 年假 属带薪假，既不扣钱也不影响全勤（用户确认「婚假不算请假」）；
+ * 病假暂无工资条样本可验证，先按带薪处理，等结算出来再校准。
+ * 其余 calc_field 在本账号尚未出现过非零值；一旦出现会写进 note 提示核对。 */
 var KQ_LEAVE_FIELDS = [
-  [19, '事假'], [20, '病假'], [21, '年假'], [24, '婚假']
+  [19, '事假', true],
+  [20, '病假', false],
+  [21, '年假', false],
+  [24, '婚假', false]
 ];
 var KQ_HOUR_FIELDS = [1, 3, 5];   /* 正班 / 平时加班 / 周末加班 */
 
@@ -3224,11 +2945,15 @@ function hrBuildFromKqDetail(ym, rows){
     var f3 = hrNum(r.calc_field3);
     var f5 = hrNum(r.calc_field5);
 
-    /* 汇总各类假期工时 */
-    var lv = 0, lvTxt = [];
+    /* 汇总各类假期工时；deduct 标记这天的假是否要扣钱 */
+    var lv = 0, lvTxt = [], deduct = false;
     for (var k=0;k<KQ_LEAVE_FIELDS.length;k++){
       var v = hrNum(r['calc_field' + KQ_LEAVE_FIELDS[k][0]]);
-      if (v > 0){ lv += v; lvTxt.push(KQ_LEAVE_FIELDS[k][1] + ' ' + r1(v) + 'h'); }
+      if (v > 0){
+        lv += v;
+        lvTxt.push(KQ_LEAVE_FIELDS[k][1] + ' ' + r1(v) + 'h');
+        if (KQ_LEAVE_FIELDS[k][2]) deduct = true;
+      }
     }
     /* 其余未识别字段有任何非零值 → 记下来提示核对（不计入，避免误扣钱） */
     for (var p in r){
@@ -3252,10 +2977,12 @@ function hrBuildFromKqDetail(ym, rows){
       works++;
     } else if (lv > 0){
       recs.push({
-        date: date, type: 'absent', hours: 0, leave: r1(lv),
+        date: date, type: 'absent', hours: 0, leave: r1(lv), deduct: deduct,
+        leaveKind: lvTxt.join('+'),
         n: 0, d: 0, w: 0, h: 0,
         isHoliday: 0, isWeekend: 0,
-        src: 'kqdetail', note: '日考勤同步：' + lvTxt.join('+')
+        src: 'kqdetail',
+        note: '日考勤同步：' + lvTxt.join('+') + (deduct ? '' : '（带薪，不扣工资）')
       });
       leaves++;
     } else {
@@ -3282,7 +3009,14 @@ function hrSyncMonth(ym, rows){
   }
   for (var j=0;j<built.recs.length;j++) recs.push(built.recs[j]);
   setRecs(recs);
-  return {added: built.recs.length, removed: removed, built: built};
+  /* 记下这家公司考勤覆盖到的最后一天（用于判断「漏卡」和「截至今日」） */
+  var maxD = '';
+  for (var q=0;q<rows.length;q++){
+    var d0 = String((rows[q] || {}).id_date || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d0) && d0.slice(0,7) === ym && d0 > maxD) maxD = d0;
+  }
+  if (maxD) setKqCoverTo(ym, maxD);
+  return {added: built.recs.length, removed: removed, built: built, coverTo: maxD};
 }
 
 /* 工资条 → 参数自动对齐：应出勤工时（item_61）与基本工资（item_62）按工资条锁定，
@@ -3449,7 +3183,7 @@ function hrFetchData(ym, off, at){
           refreshRecords();
           syncTxt = '日考勤已同步 ' + ymLabel(syncYM) + '：覆盖旧记录 ' + sr.removed + ' 条 → 写入 ' + sr.added
                   + ' 条（出勤 ' + sr.built.works + ' 天'
-                  + (sr.built.leaves ? '、请假 ' + sr.built.leaves + ' 天' : '') + '）';
+                  + (sr.built.leaves ? '、假期 ' + sr.built.leaves + ' 天' : '') + '）';
         }
       }
     }catch(e){}
@@ -3526,8 +3260,8 @@ function boot(){
     refreshHome();
     refreshRecords();
     loadBanner();
-    hrLoadAcct();       /* 把已保存的公司账号预填到登录框（不自动登录） */
-    hrShowLogin();
+    hrLoadAcct();       /* 把已保存的公司账号预填到登录框 */
+    hrAutoStart();      /* 存过账号就自动登录并读取，没有才显示登录页 */
   }catch(e){}
 }
 boot();
@@ -3553,12 +3287,6 @@ window.hrImport = hrImport;
 window.hrGotoYM = hrGotoYM;
 window.recHrImport = recHrImport;
 window.wpsSign = wpsSign;
-window.pickType = pickType;
-window.setHours = setHours;
-window.punchChanged = punchChanged;
-window.savePunch = savePunch;
-window.punchBack = punchBack;
-window.editRecord = editRecord;
 window.askDeleteRecord = askDeleteRecord;
 window.askDeleteAllRecords = askDeleteAllRecords;
 window.askDeleteMonth = askDeleteMonth;
@@ -3576,17 +3304,11 @@ window.clearStdMonth = clearStdMonth;      // 清除本月，回到自动推算
 window.resplitRecords = resplitRecords;    // 按当前节假日规则重算全部记录
 window.renderTaxHint = renderTaxHint;
 window.setTheme = setTheme;
-window.backfillToday = backfillToday;
-window.backfillAll = backfillAll;
-window.bfPopulate = bfPopulate;
-window.bfYearChange = bfYearChange;
-window.bfReadYM = bfReadYM;
 window.askConfirm = askConfirm;
 window.doConfirmOK = doConfirmOK;
 window.doConfirmCancel = doConfirmCancel;
 window.doDeleteRecord = doDeleteRecord;
 window.doDeleteAllRecords = doDeleteAllRecords;
-window.doCommitPunchConfirmed = doCommitPunchConfirmed;  // 打卡覆盖确认（读全局草稿）
 window.doImportOverwrite = doImportOverwrite;
 window.doResetSettings = doResetSettings;
 window.toast = toast;

@@ -60,7 +60,7 @@ const wanted = new Set();
 for (const mm of script.matchAll(/\$\('([^']+)'\)/g)) wanted.add(mm[1]);
 const missingIds = [...wanted].filter(n => !ids.has(n));
 ok("所有字面量 $('id') 都能在 HTML 找到 (" + wanted.size + " 个)", missingIds.length === 0, missingIds.join(', '));
-for (const must of ['typeRow',
+for (const must of [
                     'uOtRate', 'sStdOt',
                     'sStdMonth', 'uStdMonth', 'uStdMapList',
                     'setSummary', 'sumStd', 'sumOt', 'sumPay', 'sumMore', 'themeNow', 'uVersion',
@@ -189,30 +189,6 @@ S.setRecs([{ date: '2026-10-13', type: 'work', hours: 0, n: 8, d: 0, w: 0, h: 0 
 S.resplitRecords();
 ok('工时缺失但有拆分的旧记录被保留', S.getRecs()[0].n === 8, JSON.stringify(S.getRecs()[0]));
 
-/* 5.6 保存打卡不跳首页 */
-S.setRecs([]);
-S._editDate = '';
-S.$('pDate').value = '2026-10-14';
-S.$('pHours').value = '8';
-S.$('pNote').value = '测试';
-S.pickType('work');
-S.doCommitPunch(S.buildRec('2026-10-14', 'work', 8, '测试'));
-ok('保存后停留在打卡页', document.getElementById('page-punch').className.indexOf('on') >= 0,
-  document.getElementById('page-punch').className);
-ok('保存后没有跳到首页', document.getElementById('page-home').className.indexOf('on') < 0,
-  document.getElementById('page-home').className);
-ok('保存后日期保持在刚存的那天', document.getElementById('pDate').value === '2026-10-14',
-  document.getElementById('pDate').value);
-ok('保存后表单复位为上班打卡', S._curType === 'work' && document.getElementById('savePunchBtn').textContent === '保存打卡',
-  S._curType + '/' + document.getElementById('savePunchBtn').textContent);
-ok('记录确实写进去了', S.getRecs().length === 1 && S.getRecs()[0].date === '2026-10-14', JSON.stringify(S.getRecs()));
-
-/* 5.7 编辑保存仍然回记录页 */
-S._editDate = '2026-10-14';
-S.doCommitPunch(S.buildRec('2026-10-14', 'work', 9, '改过'));
-ok('编辑保存后回记录页', document.getElementById('page-records').className.indexOf('on') >= 0,
-  document.getElementById('page-records').className);
-
 /* 5.8 设置页：collectSettings 按工资条口径收参 */
 S.$('sBase').value = '2700';
 S.$('sSocial').value = '421.04';
@@ -232,16 +208,9 @@ ok('collectSettings 已无旧字段（otMode/固定时薪/倍数/自动补卡）
   && cs.auto === undefined && cs.std === undefined);
 ok('collectSettings 收下餐补上限 360', cs.mealCap === 360, cs.mealCap);
 
-/* 5.9 缺勤按钮（回归） */
-S.pickType('absent');
-ok('选缺勤 → hoursField 隐藏', document.getElementById('hoursField').style.display === 'none');
-ok('选缺勤 → 按钮文案「记录缺勤」', document.getElementById('savePunchBtn').textContent === '记录缺勤',
-  document.getElementById('savePunchBtn').textContent);
-S.pickType('work');
-ok('选上班 → 按钮文案「保存打卡」', document.getElementById('savePunchBtn').textContent === '保存打卡');
-
 /* ---------- 6. 每月标准工时：两套方案 ---------- */
 section('6. 应出勤工时（工资条 / 手动 / 自动推算）');
+S._curYM = '2026-10';   /* boot 被跳过，这里显式指定查看月份 */
 S.setRecs([]);
 S.setStdMap({});
 const stub = id => document.getElementById(id);
@@ -339,17 +308,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4'].filter(g => heads[g].
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.4', S.APP_VER === '2.4', S.APP_VER);
-ok('title 带 v2.4', /<title>[^<]*v2\.4[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.4', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.4</string>') >= 0);
+ok('APP_VER = 2.5', S.APP_VER === '2.5', S.APP_VER);
+ok('title 带 v2.5', /<title>[^<]*v2\.5[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.5', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.5</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：奖金基数', stub('sumPay').textContent.indexOf('奖金') >= 0, stub('sumPay').textContent);
 ok('折叠标题摘要：加班折算', stub('sumOt').textContent.indexOf('174') >= 0 || stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.4') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.5') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });
@@ -672,8 +641,8 @@ ok('导入的记录出现在记录页', recHtml.indexOf('08月03日') >= 0, recH
 ok('记录页工时显示为整数 11 而非 11.00', recHtml.indexOf('共 11h') >= 0, recHtml.slice(0, 200));
 ok('记录页拆分也显示整数', recHtml.indexOf('正常 8') >= 0 && recHtml.indexOf('平日加 3') >= 0);
 ok('记录页保留 HR导入 备注', recHtml.indexOf('HR导入') >= 0);
-ok('记录页可编辑 / 删除导入的记录',
-  recHtml.indexOf('editRecord') >= 0 && recHtml.indexOf('askDeleteRecord') >= 0);
+ok('记录页保留删除入口（已无本地编辑）',
+  recHtml.indexOf('askDeleteRecord') >= 0 && recHtml.indexOf('editRecord') < 0);
 ok('fmtHs 整数不带小数', S.fmtHs(11) === '11' && S.fmtHs(8) === '8');
 ok('fmtHs 迟到场景保留两位', S.fmtHs(7.58) === '7.58');
 ok('hrPunchBrief 只取首末两次卡',
@@ -963,10 +932,21 @@ section('17. 日考勤同步（含婚假等假别）');
   S.setStdForMonth('2026-11', 176, 'manual');
   S.setBaseMap({ '2026-11': 2700 });
   const m11 = S.calcMonth('2026-11');
-  ok('婚假落在工作日 → 扣 8h', m11.leaveHours === 8, m11.leaveHours);
-  ok('正班合计 = 176 − 8 = 168h', m11.attendHours === 168, m11.attendHours);
-  ok('正班工资 = 2700÷176×168 = 2577.27', m11.base === 2577.27, m11.base);
+  ok('婚假是带薪假 → 不扣正班工时', m11.leaveHours === 0, m11.leaveHours);
+  ok('正班合计 = 应出勤 176h', m11.attendHours === 176, m11.attendHours);
+  ok('正班工资 = 基本工资全额 2700', m11.base === 2700, m11.base);
+  ok('婚假不影响全勤奖（全额发放）', m11.full === S.getSet().full, m11.full + ' / ' + S.getSet().full);
   ok('当月应发出勤工资 = 正班 + 加班', m11.attend === Math.round((m11.base + m11.otMoney) * 100) / 100, m11.attend);
+
+  // 只有事假才扣钱、清全勤
+  S.setRecs([
+    { date: '2026-11-02', type: 'absent', hours: 0, leave: 8, deduct: true, src: 'kqdetail', note: '事假 8h' },
+    { date: '2026-11-03', type: 'work', hours: 8, n: 8, d: 0, w: 0, h: 0, src: 'kqdetail', note: '出勤' },
+  ]);
+  const m11b = S.calcMonth('2026-11');
+  ok('事假扣 8h 正班', m11b.leaveHours === 8, m11b.leaveHours);
+  ok('事假 → 正班合计 168h', m11b.attendHours === 168, m11b.attendHours);
+  ok('事假 → 全勤清零', m11b.full === 0, m11b.full);
 
   // 「截至今日」：当月不该把未来工作日算成出勤
   S._freezeMonthEnd = false;
