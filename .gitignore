@@ -11,3 +11,9 @@ build.log
 Thumbs.db
 .vscode/
 .idea/
+
+# 本机抓的真实数据（含账号 cookie、工资条、考勤），绝不入库
+hr-data/
+dev-data/
+# 本地验证用的还原数据
+*.decoded.json
