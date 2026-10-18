@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 
 const TOKEN = process.env.GH_TOKEN;
 const OWNER = 'hailanshi', REPO = 'punch-calc-app';
-const SHA = fs.readFileSync(path.join(__dirname, 'last-commit.txt'), 'utf8').trim();
+const SHA = fs.readFileSync(path.join(__dirname, '..', 'last-commit.txt'), 'utf8').trim();
 const API = 'https://api.github.com';
 const OUT = __dirname;
 

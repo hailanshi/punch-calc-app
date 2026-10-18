@@ -6,6 +6,10 @@ ios-shell/PunchCalcApp/_payload/
 ios-shell/PunchCalcApp/*.xcodeproj/
 ios-shell/PunchCalcApp/build.log
 build.log
+# 工具运行产物
+last-commit.txt
+tools/last-commit.txt
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db
