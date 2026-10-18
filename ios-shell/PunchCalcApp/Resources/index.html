@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.7</title>
+<title>打卡工资计算器 v2.8</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -208,6 +208,16 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 .hint{font-size:12px; color:var(--ink3);}
 .notice-badge{background:var(--chip); color:var(--main-deep); border-radius:10px; padding:2px 9px; font-size:12px; font-weight:700;}
 .badge.paid{background:#e6f6ec; color:#1a8b46;}
+/* 启动登录闸门 / 编辑弹窗 */
+.gate{position:fixed; inset:0; z-index:9999; background:linear-gradient(180deg,#fff2f7,#ffe4ef);
+  display:flex; align-items:center; justify-content:center; padding:22px;}
+.gateCard{width:100%; max-width:380px; background:var(--card); border-radius:20px; padding:22px 18px;
+  box-shadow:0 14px 44px rgba(214,51,132,.18);}
+.gateIcon{font-size:42px; text-align:center; line-height:1;}
+.gateTitle{text-align:center; font-size:20px; font-weight:800; margin:8px 0 4px; color:var(--ink);}
+.gateSub{text-align:center; font-size:12px; color:var(--ink3); line-height:1.7; margin-bottom:14px;}
+.gateCard .field label{font-size:13px;}
+.gateCard .field input, .gateCard .field select{width:100%;}
 .pill{display:inline-block; background:var(--chip); color:var(--main-deep); border-radius:10px; padding:3px 10px; font-size:12px; font-weight:700;}
 
 /* theme dots */
@@ -398,29 +408,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
     <div class="scroll">
 
       <!-- 登录卡：不预置账号密码，必须自己输；可勾选保存到本机 -->
-      <div class="card pad" id="hrLoginCard">
-        <div style="font-size:15px;font-weight:700;margin-bottom:4px;">登录公司系统</div>
-        <div class="hint" style="margin-bottom:10px;">
-          读取 hr.voopootech.net 的工资条与打卡数据。账号只保存在本机，不会上传。
-        </div>
-        <div class="field">
-          <label>账号</label>
-          <input type="text" id="hrUser" autocomplete="off" placeholder="请输入工号">
-        </div>
-        <div class="field">
-          <label>密码</label>
-          <input type="password" id="hrPass" autocomplete="off" placeholder="请输入密码">
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:12px 2px;">
-          <input type="checkbox" id="hrRemember" style="width:17px;height:17px;" checked>
-          <span>保存登录（下次自动填好，不用再输）</span>
-        </label>
-        <button type="button" class="btn main block" id="hrLoginBtn" onclick="window.hrLogin()">登录</button>
-        <div class="hint" id="hrLoginHint" style="margin-top:10px;"></div>
-      </div>
-
-      <!-- 数据卡：登录后才显示 -->
-      <div id="hrDataWrap" style="display:none;">
+      <div id="hrDataWrap">
         <div class="card pad">
           <div class="monthBar">
             <button type="button" class="mIcon" onclick="window.hrShiftMonth(-1)">‹</button>
@@ -580,7 +568,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
       <div class="card pad helpSec">
         <h3>🔒 数据与兼容性说明</h3>
-        <p>打卡工资计算器 <b><span id="helpVer">v2.7</span></b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。</p>
+        <p>打卡工资计算器 <b><span id="helpVer">v2.8</span></b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。</p>
         <p>公司页的账号密码<b>只存在本机</b>（勾选「保存登录」时才落盘），不会上传到任何地方；本程序的源码里不含任何账号信息。</p>
       </div>
 
@@ -667,7 +655,7 @@ var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYY
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 var LS_KQCOVER = 'punchSalaryKqCover_v1'; // 每月考勤数据覆盖到的最后一天 {YYYY-MM:YYYY-MM-DD}
 
-var APP_VER = '2.7';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.8';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   /* ===== 公司工资条口径：只有这些参数 ===== */
@@ -1529,6 +1517,104 @@ function buildRec(ds, type, hours, note, flags){
   };
 }
 
+/* ---------------- 记录编辑（手动修正，同步时不会被覆盖） ---------------- */
+var _editRecDate = '';
+function recByDate(dateStr){
+  var recs = getRecs();
+  for (var i=0;i<recs.length;i++){ if (recs[i].date === dateStr) return recs[i]; }
+  return null;
+}
+function openEdit(dateStr){
+  var g = $('editGate'); if (!g) return;
+  _editRecDate = dateStr;
+  var r = recByDate(dateStr);
+  g.style.display = 'flex';
+  var ct = classify(dateStr);
+  var dayName = (ct.type === 'workday') ? '工作日'
+    : (ct.type === 'weekend' ? '周末' : (ct.name || '节假日'));
+  if ($('editDateLbl')) $('editDateLbl').textContent = dateStr + ' 周' + weekdayCn(dateStr) + ' · ' + dayName;
+  var t = 'work', hrs = 8, note = '';
+  if (r){
+    if (r.type === 'work'){ t = 'work'; hrs = (+r.hours) || 8; }
+    else if (r.type === 'absent'){ t = (r.deduct === false) ? 'paid' : 'absent'; }
+    else if (r.type === 'rest'){ t = 'rest'; }
+    note = r.note || '';
+  }
+  if ($('editType')) $('editType').value = t;
+  if ($('editHours')) $('editHours').value = hrs;
+  if ($('editNote')) $('editNote').value = note;
+  if ($('editHint')) $('editHint').textContent = r ? '' : '这一天还没有记录，保存后会新增。';
+  editTypeChange();
+}
+function closeEdit(){
+  var g = $('editGate'); if (g) g.style.display = 'none';
+  _editRecDate = '';
+}
+function editTypeChange(){
+  var t = ($('editType') && $('editType').value) || 'work';
+  var row = $('editHoursRow');
+  if (row) row.style.display = (t === 'work') ? '' : 'none';
+  var sp = $('editSplit');
+  if (!sp) return;
+  if (t !== 'work'){ sp.textContent = ''; return; }
+  var h = parseFloat(($('editHours') && $('editHours').value) || '0') || 0;
+  if (!_editRecDate){ sp.textContent = ''; return; }
+  var s = splitHours(_editRecDate, 'work', h);
+  sp.textContent = '拆分：正常 ' + fmtHs(s.n) + 'h · 平日加 ' + fmtHs(s.d)
+    + 'h · 周末加 ' + fmtHs(s.w) + 'h · 节假加 ' + fmtHs(s.h) + 'h';
+}
+function saveEdit(){
+  if (!_editRecDate){ closeEdit(); return; }
+  var t = ($('editType') && $('editType').value) || 'work';
+  var h = parseFloat(($('editHours') && $('editHours').value) || '0') || 0;
+  var note = (($('editNote') && $('editNote').value) || '').replace(/^\s+|\s+$/g, '');
+  var date = _editRecDate;
+  var recs = getRecs(), out = [], hit = false;
+  for (var i=0;i<recs.length;i++){
+    if (recs[i].date !== date){ out.push(recs[i]); continue; }
+    hit = true;
+    if (t === 'work'){
+      var s = splitHours(date, 'work', h);
+      out.push({ date: date, type: 'work', hours: h, n: s.n, d: s.d, w: s.w, h: s.h,
+        isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1, note: note || '手动编辑' });
+    } else if (t === 'paid'){
+      out.push({ date: date, type: 'absent', hours: 0, leave: 8, deduct: false, leaveKind: '带薪假',
+        n: 0, d: 0, w: 0, h: 0, isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1,
+        note: note || '手动编辑：带薪假（不扣钱）' });
+    } else if (t === 'absent'){
+      out.push({ date: date, type: 'absent', hours: 0, leave: 8, deduct: true, leaveKind: '事假',
+        n: 0, d: 0, w: 0, h: 0, isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1,
+        note: note || '手动编辑：事假（扣钱）' });
+    } else {
+      out.push({ date: date, type: 'rest', hours: 0, n: 0, d: 0, w: 0, h: 0,
+        isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1, note: note || '手动编辑：休息' });
+    }
+  }
+  if (!hit){
+    if (t === 'work'){
+      var s2 = splitHours(date, 'work', h);
+      out.push({ date: date, type: 'work', hours: h, n: s2.n, d: s2.d, w: s2.w, h: s2.h,
+        isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1, note: note || '手动新增' });
+    } else if (t === 'paid'){
+      out.push({ date: date, type: 'absent', hours: 0, leave: 8, deduct: false, leaveKind: '带薪假',
+        n: 0, d: 0, w: 0, h: 0, isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1,
+        note: note || '手动新增：带薪假' });
+    } else if (t === 'absent'){
+      out.push({ date: date, type: 'absent', hours: 0, leave: 8, deduct: true, leaveKind: '事假',
+        n: 0, d: 0, w: 0, h: 0, isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1,
+        note: note || '手动新增：事假' });
+    } else {
+      out.push({ date: date, type: 'rest', hours: 0, n: 0, d: 0, w: 0, h: 0,
+        isHoliday: 0, isWeekend: 0, src: 'manual', manual: 1, note: note || '手动新增：休息' });
+    }
+  }
+  setRecs(out);
+  closeEdit();
+  refreshRecords();
+  refreshHome();
+  toast('已保存 ' + date + '（手动记录，同步时不会被覆盖）', 'good');
+}
+
 /* ---------------- 记录管理 ---------------- */
 function refreshRecords(){
   try{
@@ -1583,6 +1669,7 @@ function recRowHtml(r){
     '<span class="badge ' + badgeCls + '">' + badgeTxt + '</span></div>' +
     '<div class="sub">' + sub + '</div>' +
     '<div class="ops">' +
+      '<button type="button" class="opBtn" onclick="window.openEdit(\'' + r.date + '\')">编辑</button>' +
         '<button type="button" class="opBtn del" onclick="window.askDeleteRecord(\'' + r.date + '\')">删除</button>' +
     '</div></div>';
 }
@@ -2116,23 +2203,15 @@ var _hrSavedChecked = false;               /* 读一次「保存登录」勾选�
 /* ---------- 账号存储 ----------
  * 已保存的账号只做「预填」，不自动登录 —— 用户明确要求不要默认登录好，
  * 每次都要自己点一下「登录」。但填好的值允许直接点，不必重敲。 */
+/* 把已保存的账号预填到启动闸门的输入框（登录仍由闸门负责） */
 function hrLoadAcct(){
   try{
     var o = storeGet(LS_HRACCT, null);
-    var user = $('hrUser'), pass = $('hrPass'), rem = $('hrRemember');
-    if (o && typeof o === 'object' && o.u){
-      if (user) user.value = o.u;
-      if (pass) pass.value = o.p || '';
-      if (rem) rem.checked = true;
-      _hrSavedChecked = true;
-      /* 预填即可用：登录时若输入框内容没变，直接放行 */
-      _hrAcct = o.u;
-      _hrPwd  = o.p || '';
-      var h = $('hrLoginHint');
-      if (h) h.innerHTML = '已保存登录：<b>' + esc(o.u) + '</b>，点「登录」即可（不想保留就取消勾选「保存登录」）。';
-    } else if (rem){
-      rem.checked = false;
-    }
+    if (!o || typeof o !== 'object' || !o.u) return;
+    var u = $('gateUser'), p = $('gatePass');
+    if (u && !u.value) u.value = o.u;
+    if (p && !p.value) p.value = o.p || '';
+    _hrSavedChecked = true;
   }catch(e){}
 }
 /* 只清除本机保存的账号，不动输入框里用户正在敲的内容
@@ -2141,117 +2220,99 @@ function hrLoadAcct(){
 function hrClearAcct(){
   try{ window.localStorage.removeItem(LS_HRACCT); }catch(e){}
   _hrSavedChecked = false;
-  var rem = $('hrRemember');
-  if (rem) rem.checked = false;
 }
 /* 登录页复位：清空输入框（退出登录时用） */
 function hrResetLoginFields(){
-  var user = $('hrUser'), pass = $('hrPass');
+  var user = $('gateUser'), pass = $('gatePass');
   if (user) user.value = '';
   if (pass) pass.value = '';
 }
 /* 登录卡 / 数据卡切换 */
-/* 启动时：本机存过账号就直接登录并读取，否则显示登录页（首次手输） */
+/* ---------------- 启动登录闸门：不登录不让进 ---------------- */
+function gateShow(msg){
+  var g = $('loginGate'); if (!g) return;
+  g.style.display = 'flex';
+  var o = storeGet(LS_HRACCT, null);
+  if (o && o.u){
+    if ($('gateUser') && !$('gateUser').value) $('gateUser').value = o.u;
+    if ($('gatePass') && !$('gatePass').value) $('gatePass').value = o.p || '';
+  }
+  var h = $('gateHint');
+  if (h) h.innerHTML = msg || '';
+}
+function gateHide(){
+  var g = $('loginGate'); if (g) g.style.display = 'none';
+}
+/* 进入软件：显示公司数据区 + 刷新首页/记录 + 拉数据 */
+function enterApp(){
+  try{ hrShowData(); }catch(e){}
+  try{ refreshHome(); }catch(e){}
+  try{ refreshRecords(); }catch(e){}
+  try{ hrRender(); }catch(e){}
+  try{ hrFetch(); }catch(e){}
+}
+/* 闸门上的「登录并进入」 */
+function gateLogin(){
+  var u = ($('gateUser') && $('gateUser').value || '').replace(/^\s+|\s+$/g, '');
+  var p = ($('gatePass') && $('gatePass').value) || '';
+  var hint = $('gateHint'), btn = $('gateBtn');
+  if (!u){ if (hint) hint.textContent = '请输入账号'; return; }
+  if (!p){ if (hint) hint.textContent = '请输入密码'; return; }
+  if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
+  if (hint) hint.textContent = '正在登录…';
+  hrAuth(u, p, function(ok, msg){
+    if (btn){ btn.disabled = false; btn.textContent = '登录并进入'; }
+    if (!ok){
+      if (hint) hint.innerHTML = '<b style="color:var(--danger);">登录失败：'
+        + esc(msg || '账号或密码不正确') + '</b>';
+      return;
+    }
+    /* 登录成功：账号密码一律存本机，下次自动进 */
+    storeSet(LS_HRACCT, { u: u, p: p });
+    _hrAcct = u; _hrPwd = p; _hrLoggedIn = true; _hrSessionOk = true;
+    if (hint) hint.textContent = '';
+    gateHide();
+    enterApp();
+  });
+}
+/* 启动时自动登录（存过账号就直接进，失败才弹闸门） */
 function hrAutoStart(){
   try{
     var o = storeGet(LS_HRACCT, null);
-    if (!o || typeof o !== 'object' || !o.u || !o.p){ hrShowLogin(); return; }
-    hrLoadAcct();
-    hrLogin(true);
-  }catch(e){ hrShowLogin(); }
+    if (!o || typeof o !== 'object' || !o.u || !o.p){ hrShowLogin(); gateShow(); return; }
+    gateShow('正在自动登录…');
+    hrAuth(o.u, o.p || '', function(ok, msg){
+      if (!ok){
+        _hrLoggedIn = false; _hrSessionOk = false;
+        gateShow('<b style="color:var(--danger);">自动登录失败：' + esc(msg || '请重新输入') + '</b>');
+        return;
+      }
+      _hrAcct = o.u; _hrPwd = o.p || '';
+      _hrLoggedIn = true; _hrSessionOk = true;
+      gateHide();
+      enterApp();
+    });
+  }catch(e){ gateShow(); }
 }
+/* ---- 旧入口保留为空实现（公司页登录卡片已移除） ---- */
+/* 公司页不再有登录卡片：登录统一由启动闸门负责 */
 function hrShowLogin(){
-  var a = $('hrLoginCard'), b = $('hrDataWrap');
-  if (a) a.style.display = '';
-  if (b) b.style.display = 'none';
+  var b = $('hrDataWrap'); if (b) b.style.display = '';
 }
 function hrShowData(){
-  var a = $('hrLoginCard'), b = $('hrDataWrap');
-  if (a) a.style.display = 'none';
-  if (b) b.style.display = '';
+  var b = $('hrDataWrap'); if (b) b.style.display = '';
 }
 /* 「登录」：校验输入 → 真的向服务器登录一次，**成功后才进数据页**。
  * 以前是「有输入就直接切到数据页」，服务器说密码不对时人已经进了数据页、
  * 登录框被隐藏，没法重登 —— 现在一律以服务器返回为准。 */
-function hrLogin(silent){
-  /* silent=true：启动时用本机保存的账号自动登录，不打扰用户 */
-  var user, pass, rem;
-  if (silent){
-    var o = storeGet(LS_HRACCT, null) || {};
-    user = String(o.u || '').replace(/^\s+|\s+$/g, '');
-    pass = String(o.p || '');
-    rem = true;
-  } else {
-    user = ($('hrUser') && $('hrUser').value || '').replace(/^\s+|\s+$/g, '');
-    pass = ($('hrPass') && $('hrPass').value) || '';
-    rem  = !!($('hrRemember') && $('hrRemember').checked);
-  }
-  var h = $('hrLoginHint');
-  var btn = $('hrLoginBtn');
-  if (!user || !pass){
-    if (!silent){
-      if (h) h.textContent = !user ? '请输入账号' : '请输入密码';
-    }
-    hrShowLogin();
-    return;
-  }
-  if (!silent){
-    if (btn){ btn.disabled = true; btn.textContent = '登录中…'; }
-    if (h) h.textContent = '正在登录…';
-  }
-
-  hrAuth(user, pass, function(ok, msg){
-    if (btn){ btn.disabled = false; btn.textContent = '登录'; }
-    if (!ok){
-      /* 登录失败：留在登录页、清掉不可用的运行期凭据与已存账号，让人重新输 */
-      _hrSessionOk = false;
-      _hrLoggedIn  = false;
-      _hrAcct = ''; _hrPwd = '';
-      if (!silent) hrClearAcct();          /* 手输错了才清；自动登录失败先保留，方便改 */
-      hrShowLogin();
-      if (h) h.innerHTML = '<b style="color:var(--danger);">'
-        + (silent ? '自动登录失败：' : '登录失败：') + esc(msg || '账号或密码不正确') + '</b>';
-      if (!silent) toast('登录失败，请重新输入');
-      return;
-    }
-    /* 登录成功：这次会话有效 */
-    _hrSessionOk = true;
-    _hrAcct = user; _hrPwd = pass;
-    if (rem){
-      storeSet(LS_HRACCT, { u: user, p: pass });
-      _hrSavedChecked = true;
-    } else {
-      hrClearAcct();       /* 没勾保存：把之前可能存过的也清掉，避免留旧密码 */
-    }
-    _hrLoggedIn = true;
-    hrShowData();
-    hrRender();
-    hrFetch();
-  });
-}
-/* 退出：运行期凭据一律清空；若本机保存过账号，只把输入框预填回去（不自动登录） */
+/* 退出：清运行期凭据并回到启动闸门；本机保存的账号仍预填在闸门里，点一下即可再进 */
 function hrLogout(){
   _hrLoggedIn = false;
   _hrSessionOk = false;
-  _hrAcct = ''; _hrPwd = '';       /* 运行期凭据必须清掉 */
-  hrShowLogin();
-  hrResetLoginFields();
-  var h = $('hrLoginHint');
-  var rec = storeGet(LS_HRACCT, null);
-  if (rec){
-    var user = $('hrUser'), pass = $('hrPass'), rem = $('hrRemember');
-    if (user) user.value = rec.u || '';
-    if (pass) pass.value = rec.p || '';
-    if (rem) rem.checked = true;
-    _hrSavedChecked = true;
-    if (h) h.innerHTML = '已退出登录。账号已保留：<b>' + esc(rec.u) + '</b>，点「登录」即可再进。';
-    toast('已退出登录（账号已保留）');
-  } else {
-    hrClearAcct();
-    if (h) h.textContent = '已退出登录。';
-    toast('已退出公司系统');
-  }
-  /* 注意：这里只预填输入框，不写回 _hrAcct —— 要再登录必须重新点「登录」 */
+  _hrAcct = ''; _hrPwd = '';
+  if ($('gatePass')) $('gatePass').value = '';
+  gateShow('已退出登录，账号已保留，点「登录并进入」即可');
+  toast('已退出登录');
 }
 
 /* 登录密码的「加密」：站点 CEComm.js 里 Set_Secret 的等价实现
@@ -2350,7 +2411,7 @@ function recHrImport(){
   /* 停在缓存里没数据的月份，就要联网取 —— 必须先登录 */
   if (!_hrLoggedIn){
     hrRender();               /* 会让公司页显示登录卡 */
-    var h0 = $('hrLoginHint');
+    var h0 = $('gateHint');
     if (h0) h0.textContent = '先登录公司系统，才能读取打卡数据导入';
     toast('请先在「公司」页登录');
     return;
@@ -3082,7 +3143,8 @@ function hrSyncMonth(ym, rows, cardRows){
     var tp = (old[i] && old[i].type) || '';
     /* 该月的出勤/请假记录一律以公司为准重写；
      * 但「法定节假日休息」是用户显式标记，不参与覆盖，保留。 */
-    if (d.slice(0,7) === ym && tp !== 'holiday'){ removed++; continue; }
+    /* 手动编辑过的记录（manual=1）不参与覆盖，否则用户改完又被公司数据冲掉 */
+    if (d.slice(0,7) === ym && tp !== 'holiday' && !(old[i] && old[i].manual)){ removed++; continue; }
     recs.push(old[i]);
   }
   for (var j=0;j<built.recs.length;j++) recs.push(built.recs[j]);
@@ -3169,7 +3231,7 @@ function hrEnsureAuth(cb){
   if (!_hrAcct || !_hrPwd){
     _hrLoggedIn = false;
     hrShowLogin();
-    var h = $('hrLoginHint');
+    var h = $('gateHint');
     if (h) h.textContent = '请先输入账号和密码登录';
     if (cb(false) !== undefined) return; else return;
   }
@@ -3178,7 +3240,7 @@ function hrEnsureAuth(cb){
     _hrSessionOk = false;
     _hrLoggedIn = false;
     hrShowLogin();
-    var h2 = $('hrLoginHint');
+    var h2 = $('gateHint');
     if (h2) h2.innerHTML = '<b style="color:var(--danger);">登录失败：' + esc(msg || '账号或密码不正确') + '</b>';
     toast('登录失败，请重新输入');
     cb(false);
@@ -3367,8 +3429,12 @@ window.toggleCard = toggleCard;
 window.toggleAcc = toggleAcc;
 /* HR / 公司 */
 window.hrBack = hrBack;
-window.hrLogin = hrLogin;
 window.hrLogout = hrLogout;
+window.gateLogin = gateLogin;
+window.openEdit = openEdit;
+window.closeEdit = closeEdit;
+window.saveEdit = saveEdit;
+window.editTypeChange = editTypeChange;
 window.hrFetch = hrFetch;
 window.hrShiftMonth = hrShiftMonth;
 window.hrClearCache = hrClearCache;
@@ -3403,5 +3469,56 @@ window.doImportOverwrite = doImportOverwrite;
 window.doResetSettings = doResetSettings;
 window.toast = toast;
 </script>
+
+<!-- ==================== 启动登录闸门（不登录不让进） ==================== -->
+<div class="gate" id="loginGate" style="display:none;">
+  <div class="gateCard">
+    <div class="gateIcon">💰</div>
+    <div class="gateTitle">打卡工资计算器</div>
+    <div class="gateSub" id="gateSub">首次使用请输入公司账号密码<br>登录一次后会保存在本机，之后打开自动进入</div>
+    <div class="field">
+      <label>账号</label>
+      <input type="text" id="gateUser" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="公司工号">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" id="gatePass" autocomplete="off" placeholder="密码">
+    </div>
+    <button type="button" class="btn main block" id="gateBtn" onclick="window.gateLogin()">登录并进入</button>
+    <div class="hint" id="gateHint" style="text-align:center; margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- ==================== 记录编辑弹窗 ==================== -->
+<div class="gate" id="editGate" style="display:none; z-index:9998;">
+  <div class="gateCard">
+    <div class="gateTitle" id="editTitle">编辑记录</div>
+    <div class="gateSub" id="editDateLbl"></div>
+    <div class="field">
+      <label>类型</label>
+      <select id="editType" onchange="window.editTypeChange()">
+        <option value="work">上班</option>
+        <option value="paid">带薪假（婚假 / 年假等，不扣钱）</option>
+        <option value="absent">事假（扣正班 + 清全勤）</option>
+        <option value="rest">休息（不影响工资）</option>
+      </select>
+    </div>
+    <div class="field" id="editHoursRow">
+      <label>工时（小时）</label>
+      <input type="number" id="editHours" step="0.5" min="0" max="24">
+      <div class="unit" id="editSplit"></div>
+    </div>
+    <div class="field">
+      <label>备注</label>
+      <input type="text" id="editNote" maxlength="60" placeholder="例如：手动修正">
+    </div>
+    <div style="display:flex; gap:8px; margin-top:4px;">
+      <button type="button" class="btn ghost" style="flex:1;" onclick="window.closeEdit()">取消</button>
+      <button type="button" class="btn main" style="flex:1;" onclick="window.saveEdit()">保存</button>
+    </div>
+    <div class="hint" id="editHint" style="text-align:center; margin-top:10px;"></div>
+  </div>
+</div>
+
 </body>
 </html>

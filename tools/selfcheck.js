@@ -308,17 +308,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4'].filter(g => heads[g].
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.7', S.APP_VER === '2.7', S.APP_VER);
-ok('title 带 v2.7', /<title>[^<]*v2\.7[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.7', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.7</string>') >= 0);
+ok('APP_VER = 2.8', S.APP_VER === '2.8', S.APP_VER);
+ok('title 带 v2.8', /<title>[^<]*v2\.8[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.8', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.8</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：奖金基数', stub('sumPay').textContent.indexOf('奖金') >= 0, stub('sumPay').textContent);
 ok('折叠标题摘要：加班折算', stub('sumOt').textContent.indexOf('174') >= 0 || stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.7') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.8') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });
@@ -393,7 +393,7 @@ try {
 } catch (e) { hrErr = e.message; }
 ok('hrRender 不抛异常', hrErr === '', hrErr);
 ok('登录后显示数据卡', stub('hrDataWrap').style.display !== 'none', stub('hrDataWrap').style.display);
-ok('登录后隐藏登录卡', stub('hrLoginCard').style.display === 'none', stub('hrLoginCard').style.display);
+
 ok('工资条卡片渲染出实发工资', stub('hrPayRows').innerHTML.indexOf('实发工资') >= 0);
 ok('工资条金额带 ¥ 符号', stub('hrPayRows').innerHTML.indexOf('¥4935.01') >= 0);
 /* 对照：只比工资条，不再比考勤 */
@@ -733,105 +733,138 @@ ok('导入的数据参与工资计算（正班 = 8+8+8）', impCalc2.sum.normal 
 ok('导入的数据带来加班工时（3+3）', impCalc2.sum.wd === 6, impCalc2.sum.wd);
 ok('导入后该月记录数正确', impCalc2.recCount === 3, impCalc2.recCount);
 
-/* ---------- 15. 公司登录（不预置账号 / 服务器验证 / 保存登录 / 退出） ---------- */
-section('15. 公司登录');
+/* ---------- 15. 启动登录闸门（不登录不进软件） ---------- */
+section('15. 启动登录闸门');
 ok('源码里不再预置账号密码', typeof S.HR_ACCT === 'undefined' && typeof S.HR_PWD === 'undefined');
-ok('源码里没有硬编码账号赋值', !/HR_ACCT\s*=\s*['"]/.test(script) && !/HR_PWD\s*=\s*['"]/.test(script));
-ok('登录用的是可编辑输入框而非固定值',
-  /user_id:\s*user/.test(script) && /hrSecret\(pass\)/.test(script));
 ok('账号存储键已定义', S.LS_HRACCT === 'punchSalaryHrAcct_v1');
-ok('认证走 hrAuth / hrEnsureAuth 两个入口',
-  typeof S.hrAuth === 'function' && typeof S.hrEnsureAuth === 'function');
+ok('认证走 hrAuth', typeof S.hrAuth === 'function');
+ok('闸门 DOM 齐备',
+  ['loginGate', 'gateUser', 'gatePass', 'gateBtn', 'gateHint'].every(id => html.indexOf('id="' + id + '"') >= 0));
+ok('公司页不再有登录卡片', html.indexOf('id="hrLoginCard"') < 0);
+ok('公司页数据区默认可见', html.indexOf('id="hrDataWrap" style="display:none;"') < 0);
 
-/* 造一个假的公司服务器：loginReply 控制登录成败，便于测「登录失败必须留在登录页」 */
+/* 假服务器 */
 let loginReply = '1';
-let failCount = 0;
 const realHrPost = S.hrPost;
 S.hrPost = function (url, body, tms, cb) {
   if (url.indexOf('action=getLangList') >= 0) { cb(true, 200, '{}'); return; }
-  if (url.indexOf('LoginController.ashx') >= 0) {
-    if (loginReply === '1') { cb(true, 200, '1'); return; }
-    failCount++;
-    cb(true, 200, loginReply);
-    return;
-  }
+  if (url.indexOf('LoginController.ashx') >= 0) { cb(true, 200, loginReply); return; }
   cb(false, 0, '');
 };
-const flush = () => { for (let i = 0; i < 12; i++) { /* hrPost 桩是同步回调，无需等待 */ } };
 
-/* 未登录时 hrFetch 应被拦住，不发请求 */
-S._hrAcct = ''; S._hrPwd = ''; S._hrLoggedIn = false; S._hrSessionOk = false;
-let fetchBlocked = false;
-const probePost = S.hrPost;
-S.hrPost = (u, b, t, cb) => { fetchBlocked = true; };
-S.hrFetch();
-S.hrPost = probePost;
-ok('未登录时 hrFetch 不发请求', fetchBlocked === false);
-ok('未登录时提示去登录', stub('hrLoginHint').textContent.indexOf('请先输入账号') >= 0, stub('hrLoginHint').textContent);
-ok('未登录时不显示数据页', stub('hrDataWrap').style.display === 'none', stub('hrDataWrap').style.display);
-
-/* 输入为空要拦住 */
-S.hrClearAcct();
-stub('hrUser').value = ''; stub('hrPass').value = '';
-S.hrLogin();
+/* 空账号 / 空密码 */
+S._hrLoggedIn = false;
+stub('gateUser').value = ''; stub('gatePass').value = '';
+S.gateLogin();
 ok('账号为空时拒绝登录', S._hrLoggedIn === false, S._hrLoggedIn);
-ok('账号为空时给出提示', stub('hrLoginHint').textContent.indexOf('请输入账号') >= 0, stub('hrLoginHint').textContent);
-stub('hrUser').value = 'u1'; stub('hrPass').value = '';
-S.hrLogin();
-ok('密码为空时拒绝登录', S._hrLoggedIn === false && stub('hrLoginHint').textContent.indexOf('请输入密码') >= 0);
+ok('账号为空时给提示', stub('gateHint').textContent.indexOf('请输入账号') >= 0, stub('gateHint').textContent);
 
-/* ★ 关键回归：服务器说密码错 -> 必须留在登录页，不能进数据页 */
+stub('gateUser').value = 'u1'; stub('gatePass').value = '';
+S.gateLogin();
+ok('密码为空时拒绝登录',
+  S._hrLoggedIn === false && stub('gateHint').textContent.indexOf('请输入密码') >= 0,
+  stub('gateHint').textContent);
+
+/* ★ 登录失败：进不去 */
 loginReply = '对不起,您输入的密码不正确';
-S._hrSessionOk = false; S._hrLoggedIn = false;
-stub('hrUser').value = 'testuser'; stub('hrPass').value = 'wrongpass';
-stub('hrRemember').checked = false;
-S.hrLogin();
-ok('登录失败时留在登录页（不显示数据页）',
-  S._hrLoggedIn === false && stub('hrDataWrap').style.display === 'none', S._hrLoggedIn + '/' + stub('hrDataWrap').style.display);
-ok('登录失败时登录卡可见', stub('hrLoginCard').style.display !== 'none', stub('hrLoginCard').style.display);
-ok('登录失败时给出服务器原因', stub('hrLoginHint').innerHTML.indexOf('密码不正确') >= 0, stub('hrLoginHint').innerHTML);
-ok('登录失败时不置会话有效', S._hrSessionOk === false);
-ok('登录失败时清掉运行期凭据', S._hrAcct === '' && S._hrPwd === '', S._hrAcct + '/' + S._hrPwd);
-ok('登录失败不落盘错误密码', !S.storeGet(S.LS_HRACCT, null));
-ok('登录失败可重新登录（输入框仍可编辑）', stub('hrUser').value === 'testuser');
+S._hrLoggedIn = false; S._hrSessionOk = false;
+stub('gateUser').value = 'testuser'; stub('gatePass').value = 'wrong';
+S.gateLogin();
+ok('登录失败不进软件', S._hrLoggedIn === false && stub('loginGate').style.display !== 'none',
+  S._hrLoggedIn + '/' + stub('loginGate').style.display);
+ok('登录失败显示服务器原因', stub('gateHint').innerHTML.indexOf('密码不正确') >= 0, stub('gateHint').innerHTML);
+ok('登录失败不落盘', !S.storeGet(S.LS_HRACCT, null), JSON.stringify(S.storeGet(S.LS_HRACCT, null)));
 
-/* 登录成功才进数据页 */
+/* 登录成功：一律保存账号 */
 loginReply = '1';
-stub('hrUser').value = 'testuser'; stub('hrPass').value = 'testpass'; stub('hrRemember').checked = false;
-S.hrLogin();
-ok('登录成功后进入数据页', S._hrLoggedIn === true && stub('hrDataWrap').style.display !== 'none', S._hrLoggedIn);
-ok('登录成功后隐藏登录卡', stub('hrLoginCard').style.display === 'none', stub('hrLoginCard').style.display);
-ok('登录成功后置会话有效', S._hrSessionOk === true);
-ok('未勾选保存时不落盘账号', !S.storeGet(S.LS_HRACCT, null), JSON.stringify(S.storeGet(S.LS_HRACCT, null)));
-/* 勾选保存 -> 落盘 */
-stub('hrUser').value = 'testuser'; stub('hrPass').value = 'testpass'; stub('hrRemember').checked = true;
-S.hrLogin();
-const loginSaved = S.storeGet(S.LS_HRACCT, null);
-ok('勾选保存后账号落盘', loginSaved && loginSaved.u === 'testuser' && loginSaved.p === 'testpass', JSON.stringify(loginSaved));
-S._hrLoggedIn = false; S._hrAcct = ''; S._hrPwd = ''; S._hrSessionOk = false;
-stub('hrUser').value = ''; stub('hrPass').value = ''; stub('hrRemember').checked = false;
-S.hrLoadAcct();
-ok('重新打开时预填账号', stub('hrUser').value === 'testuser', stub('hrUser').value);
-ok('重新打开时预填密码', stub('hrPass').value === 'testpass', stub('hrPass').value);
-ok('重新打开时勾选保存', stub('hrRemember').checked === true);
-ok('预填不等于自动登录', S._hrLoggedIn === false, S._hrLoggedIn);
-ok('预填不等于会话有效', S._hrSessionOk === false, S._hrSessionOk);
-ok('预填后提示可点登录', stub('hrLoginHint').innerHTML.indexOf('已保存登录') >= 0);
-/* 退出：回到登录页 */
-S._hrLoggedIn = true; S._hrSessionOk = true; S._hrAcct = 'testuser'; S._hrPwd = 'testpass';
+stub('gateUser').value = 'testuser'; stub('gatePass').value = 'testpass';
+S.gateLogin();
+const savedAcct = S.storeGet(S.LS_HRACCT, null);
+ok('登录成功进入软件', S._hrLoggedIn === true, S._hrLoggedIn);
+ok('登录成功会话有效', S._hrSessionOk === true);
+ok('登录成功隐藏闸门', stub('loginGate').style.display === 'none', stub('loginGate').style.display);
+ok('登录成功账号落盘（总是保存）',
+  savedAcct && savedAcct.u === 'testuser' && savedAcct.p === 'testpass', JSON.stringify(savedAcct));
+
+/* 下次启动：自动登录直接进 */
+S._hrLoggedIn = false; S._hrSessionOk = false; S._hrAcct = ''; S._hrPwd = '';
+stub('loginGate').style.display = 'flex';
+S.hrAutoStart();
+ok('存过账号时自动登录', S._hrLoggedIn === true, S._hrLoggedIn);
+ok('自动登录后隐藏闸门', stub('loginGate').style.display === 'none', stub('loginGate').style.display);
+
+/* 自动登录失败：弹闸门让人重输 */
+loginReply = '对不起,您输入的密码不正确';
+S._hrLoggedIn = false; S._hrSessionOk = false;
+S.hrAutoStart();
+ok('自动登录失败时弹闸门', stub('loginGate').style.display === 'flex', stub('loginGate').style.display);
+ok('自动登录失败时不进软件', S._hrLoggedIn === false, S._hrLoggedIn);
+loginReply = '1';
+
+/* 没有存过账号：弹闸门 */
+S.localStorage.removeItem(S.LS_HRACCT);
+S._hrLoggedIn = false;
+S.hrAutoStart();
+ok('没存过账号时弹闸门', stub('loginGate').style.display === 'flex', stub('loginGate').style.display);
+
+/* 退出：回到闸门 */
+S._hrLoggedIn = true; S._hrSessionOk = true; S._hrAcct = 'x'; S._hrPwd = 'y';
 S.hrLogout();
-ok('退出后回到登录页', S._hrLoggedIn === false && stub('hrLoginCard').style.display !== 'none');
-ok('退出后清空运行期凭据', S._hrAcct === '' && S._hrPwd === '', S._hrAcct + '/' + S._hrPwd);
-ok('退出不影响已保存的账号', !!S.storeGet(S.LS_HRACCT, null));
-/* hrLogin / hrLogout 已挂 window */
-ok('hrLogin / hrLogout 已挂 window',
-  script.indexOf('window.hrLogin = hrLogin') >= 0 && script.indexOf('window.hrLogout = hrLogout') >= 0);
-/* 底部导航：公司入口 + 首屏入口已下线 */
-ok('底部导航有「公司」入口', /navItem" data-p="hr"/.test(html) && html.indexOf('>公司</button>') >= 0);
-ok('hr 已加入 navPages（切过去底部栏不消失）',
-  /var navPages = \[[^\]]*'hr'[^\]]*\]/.test(script));
-ok('首页的 HR 按钮已移除', html.indexOf('HR工资条对照 / 导入打卡') < 0);
-ok('HR 页标题改为「公司」', /<div class="title">公司<\/div>/.test(html));
+ok('退出后回到闸门', stub('loginGate').style.display === 'flex', stub('loginGate').style.display);
+ok('退出清运行期凭据', S._hrAcct === '' && S._hrPwd === '', S._hrAcct + '/' + S._hrPwd);
+
+S.hrPost = realHrPost;
+S.setRecs([]);
+
+/* ---------- 16. 记录可手动编辑 ---------- */
+section('16. 记录手动编辑');
+{
+  S.setRecs([{ date: '2026-10-16', type: 'work', hours: 8, n: 8, d: 0, w: 0, h: 0,
+    src: 'kqdetail', note: '日考勤同步' }]);
+
+  S.openEdit('2026-10-16');
+  ok('编辑弹窗打开', stub('editGate').style.display === 'flex');
+  ok('带回原工时 8h', parseFloat(stub('editHours').value) === 8, stub('editHours').value);
+  ok('带回原类型 上班', stub('editType').value === 'work', stub('editType').value);
+
+  stub('editHours').value = '11';
+  stub('editType').value = 'work';
+  S.saveEdit();
+  let e1 = S.recByDate('2026-10-16');
+  ok('保存后工时 11h', e1 && e1.hours === 11, JSON.stringify(e1 && e1.hours));
+  ok('保存后自动拆成 8+3', e1 && e1.n === 8 && e1.d === 3, JSON.stringify([e1.n, e1.d]));
+  ok('保存后标记 manual', e1 && e1.manual === 1, e1 && e1.manual);
+  ok('编辑弹窗关闭', stub('editGate').style.display === 'none');
+
+  S.openEdit('2026-10-16');
+  stub('editType').value = 'paid';
+  S.saveEdit();
+  let e2 = S.recByDate('2026-10-16');
+  ok('改成带薪假不扣钱', e2 && e2.type === 'absent' && e2.deduct === false, JSON.stringify(e2 && [e2.type, e2.deduct]));
+
+  S.openEdit('2026-10-16');
+  stub('editType').value = 'absent';
+  S.saveEdit();
+  let e3 = S.recByDate('2026-10-16');
+  ok('改成事假要扣钱', e3 && e3.deduct === true, JSON.stringify(e3 && e3.deduct));
+
+  /* 同步公司数据时，手动记录不被覆盖 */
+  const kqRows = [{ id_date: '2026-10-16', calc_field1: 8, calc_field3: 0, calc_field5: 0 }];
+  S.hrSyncMonth('2026-10', kqRows, []);
+  const still = S.recByDate('2026-10-16');
+  ok('同步不覆盖手动编辑的记录', still && still.manual === 1, JSON.stringify(still && [still.manual, still.deduct]));
+
+  /* 没有记录的日子也能补一条 */
+  S.setRecs([]);
+  S.openEdit('2026-10-20');
+  ok('空日期也能打开编辑', stub('editGate').style.display === 'flex');
+  stub('editType').value = 'work';
+  stub('editHours').value = '11';
+  S.saveEdit();
+  const added = S.recByDate('2026-10-20');
+  ok('空日期保存后新增记录', added && added.hours === 11 && added.manual === 1, JSON.stringify(added && added.hours));
+  S.setRecs([]);
+}
 
 /* ---------- 16. 考勤月报签收（WPS） ---------- */
 section('16. 考勤月报签收');
@@ -900,7 +933,7 @@ ok('HR 内联 handler 都已挂 window',
   ['hrBack', 'hrFetch', 'hrShiftMonth', 'hrClearCache', 'hrSelAll', 'hrImport']
     .every(f => script.indexOf('window.' + f + ' = ' + f) >= 0));
 ok('HR 页 DOM id 齐备',
-  ['page-hr', 'hrLoginCard', 'hrUser', 'hrPass', 'hrRemember', 'hrLoginBtn', 'hrLoginHint',
+  ['page-hr',
    'hrDataWrap', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrPayRows', 'hrPayHint',
    'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount']
     .every(id => html.indexOf('id="' + id + '"') >= 0));
