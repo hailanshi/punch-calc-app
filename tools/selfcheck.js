@@ -60,32 +60,30 @@ const wanted = new Set();
 for (const mm of script.matchAll(/\$\('([^']+)'\)/g)) wanted.add(mm[1]);
 const missingIds = [...wanted].filter(n => !ids.has(n));
 ok("所有字面量 $('id') 都能在 HTML 找到 (" + wanted.size + " 个)", missingIds.length === 0, missingIds.join(', '));
-for (const must of ['typeRow', 'holiKindRow', 'otModeRow', 'blkRate', 'blkMult', 'tagRate', 'tagMult',
-                    'uOtMode', 'uOtRate', 'sRate1', 'sRate2', 'sRate3', 'sOT1', 'sOT2', 'sOT3',
-                    'sStdMonth', 'uStdMonth', 'uStdMonthLbl', 'tagStdManual', 'tagStdNet', 'uStdMapList',
-                    'setSummary', 'sumStd', 'sumBase', 'sumOt', 'sumPay', 'sumMore', 'themeNow', 'uVersion',
-                    'acc-g1', 'acc-g2', 'acc-g3', 'acc-g4', 'acc-g5']) {
+for (const must of ['typeRow',
+                    'uOtRate', 'sStdOt',
+                    'sStdMonth', 'uStdMonth', 'uStdMapList',
+                    'setSummary', 'sumStd', 'sumOt', 'sumPay', 'sumMore', 'themeNow', 'uVersion',
+                    'acc-g1', 'acc-g2', 'acc-g3', 'acc-g4']) {
   ok('id 存在: ' + must, ids.has(must));
 }
-ok('旧的 sStd 输入框已移除（并入每月标准工时）', !ids.has('sStd'));
-ok('旧的 uAuto / uStd 已移除', !ids.has('uAuto') && !ids.has('uStd'));
+ok('旧的 sStd 输入框已移除', !ids.has('sStd'));
+ok('节假日前端已移除（管理页/自定义节假日/两套加班参数）',
+   !ids.has('page-holidays') && !ids.has('holiKindRow') && !ids.has('otModeRow')
+   && !ids.has('sRate1') && !ids.has('sOT1') && !ids.has('sAuto'));
+ok('餐补上限输入框保留（公司规则 360）', ids.has('sMealCap'));
 
-/* ---------- 4. 两套参数并存 + 单一计算入口 ---------- */
-section('4. 两套加班参数并存、且只有一个计算入口');
-ok('DEFAULTS 有 otMode', /otMode:'rate'/.test(script));
-ok('DEFAULTS 有倍数 ot1/ot2/ot3', /ot1:1\.5, ot2:2, ot3:3/.test(script));
-ok('DEFAULTS 有固定时薪 otRate1/2/3', /otRate1:23\.28/.test(script) && /otRate3:46\.55/.test(script));
-// calcMonth 里必须只用 R.r1/R.r2/R.r3，不能再直接乘倍数或直接取 otRate
+/* ---------- 4. 加班单价：公司工资条唯一口径 ---------- */
+section('4. 加班单价 = 基本工资 ÷ 174 × 1.5/2/3（唯一口径）');
+ok('DEFAULTS 已无 otMode / 固定时薪 / 倍数配置',
+   !/otMode\s*:/.test(script) && !/otRate1\s*:/.test(script) && !/ot1\s*:/.test(script));
+ok('DEFAULTS 保留 stdOt:174', /stdOt\s*:\s*174/.test(script));
 const cmBody = script.slice(script.indexOf('function calcMonth('), script.indexOf('function rowHtml('));
-ok('calcMonth 用 otRatesFor 取生效时薪', /var R = otRatesFor\(ym, S\)/.test(cmBody));
+ok('calcMonth 用 otRatesFor 取单价', /var R = otRatesFor\(ym, S\)/.test(cmBody));
 ok('calcMonth 加班费只乘 R.r1/r2/r3',
   /sum\.wd\s*\*\s*R\.r1/.test(cmBody) && /sum\.we\s*\*\s*R\.r2/.test(cmBody) && /sum\.hol\s*\*\s*R\.r3/.test(cmBody));
-ok('calcMonth 里没有 S.ot1/S.ot2/S.ot3 直接相乘', !/sum\.\w+\s*\*\s*hourly\s*\*\s*S\.ot/.test(cmBody));
-ok('calcMonth 里没有 S.otRate* 直接相乘', !/S\.otRate\d/.test(cmBody));
-ok('otRatesFor 是唯一分支点', (script.match(/function otRatesFor\(/g) || []).length === 1);
-// 全站不应再有别处自己判断模式
-const modeChecks = (script.match(/otMode\s*===\s*'mult'/g) || []).length;
-ok("otMode==='mult' 判断只出现在 otRatesFor 与展示逻辑里 (共 " + modeChecks + " 处)", modeChecks <= 6, modeChecks);
+ok('otRatesFor 只有一处定义', (script.match(/function otRatesFor\(/g) || []).length === 1);
+ok('全站不再有 otMode 分支', !/otMode/.test(script));
 
 /* ---------- 5. 逻辑自检 ---------- */
 section('5. 逻辑自检');
@@ -135,91 +133,56 @@ try {
   console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败'); process.exit(1);
 }
 const S = sandbox;
+/* 自检固定按「整月应出勤」口径，避免断言随系统日期漂移
+ * （真实运行时当月会只算到今天为止，见 stdHoursElapsed） */
+S._freezeMonthEnd = true;
 
-/* 5.1 默认值 */
+/* 5.1 默认值（公司工资条口径） */
 const st = S.getSet();
-/* 默认加班方式 = 底薪倍数（= 公司工资条口径：基本工资÷174×1.5/2/3） */
-ok('默认 otMode = mult（工资条口径）', S.otModeOf(st) === 'mult', st.otMode);
-ok('默认倍数 1.5/2/3', st.ot1 === 1.5 && st.ot2 === 2 && st.ot3 === 3, [st.ot1, st.ot2, st.ot3].join('/'));
-ok('默认时薪 23.28/31.03/46.55', st.otRate1 === 23.28 && st.otRate2 === 31.03 && st.otRate3 === 46.55,
-  [st.otRate1, st.otRate2, st.otRate3].join('/'));
+ok('默认 stdOt = 174（加班时薪分母）', st.stdOt === 174, st.stdOt);
+ok('默认基本工资 2700', st.base === 2700, st.base);
+ok('已无固定时薪 / 倍数 / otMode 配置',
+  st.otMode === undefined && st.otRate1 === undefined && st.ot1 === undefined);
 
-/* 5.2 固定时薪模式：单价写死，不随底薪变
- * 注意：默认已是 mult（公司口径），这里必须显式切到 rate 再测。 */
-S.setSet(Object.assign(S.getSet(), { otMode: 'rate' }));
-S.setRecs([
-  S.buildRec('2026-10-10', 'work', 10, ''),  // 调休补班工作日 → 2h 平日加班
-  S.buildRec('2026-10-11', 'work', 6, ''),   // 周日 → 6h 周末加班
-  S.buildRec('2026-10-01', 'work', 4, ''),   // 国庆当天 → 4h 节假日加班
-]);
-let cm = S.calcMonth('2026-10');
-ok('[rate] 平日 2h×23.28 = 46.56', cm.otWd === 46.56, cm.otWd);
-ok('[rate] 周末 6h×31.03 = 186.18', cm.otWe === 186.18, cm.otWe);
-ok('[rate] 法定 4h×46.55 = 186.20', cm.otHol === 186.2, cm.otHol);
-ok('[rate] 合计 418.94', cm.otMoney === 418.94, cm.otMoney);
-const ratePay = cm.otMoney;
-S.setSet(Object.assign(S.getSet(), { base: 5000 }));
-ok('[rate] 底薪 2700→5000 加班费不变', S.calcMonth('2026-10').otMoney === ratePay);
+/* 5.2 三档单价 = 基本工资 ÷ 174 × 1.5 / 2 / 3 */
+S.setBaseMap({ '2026-10': 2700 });
+S.setSet(Object.assign(S.getSet(), { base: 2700, stdOt: 174 }));
+const Rr = S.otRatesFor('2026-10', S.getSet());
+ok('平日单价 = 2700÷174×1.5', Math.abs(Rr.r1 - 2700 / 174 * 1.5) < 1e-9, Rr.r1);
+ok('周末单价 = 2700÷174×2', Math.abs(Rr.r2 - 2700 / 174 * 2) < 1e-9, Rr.r2);
+ok('法定单价 = 2700÷174×3', Math.abs(Rr.r3 - 2700 / 174 * 3) < 1e-9, Rr.r3);
+ok('单价文案带倍数', /倍 = /.test(S.otNote(Rr, 1)), S.otNote(Rr, 1));
+
+/* 5.3 底薪变化 → 单价跟着浮动 */
+S.setBaseMap({ '2026-10': 2520 });
+S.setSet(Object.assign(S.getSet(), { base: 2520 }));
+const Rr2 = S.otRatesFor('2026-10', S.getSet());
+ok('2520 时平日单价 = 2520÷174×1.5', Math.abs(Rr2.r1 - 2520 / 174 * 1.5) < 1e-9, Rr2.r1);
+ok('底薪降 → 单价跟着降', Rr2.r1 < Rr.r1, Rr.r1 + ' → ' + Rr2.r1);
+S.setBaseMap({});
 S.setSet(Object.assign(S.getSet(), { base: 2700 }));
-// rate 模式下改倍数不应有任何影响
-S.setSet(Object.assign(S.getSet(), { ot1: 9, ot2: 9, ot3: 9 }));
-ok('[rate] 改倍数完全不影响结果（互斥）', S.calcMonth('2026-10').otMoney === ratePay, S.calcMonth('2026-10').otMoney);
-S.setSet(Object.assign(S.getSet(), { ot1: 1.5, ot2: 2, ot3: 3 }));
 
-/* 5.3 底薪倍数模式：单价跟底薪浮动，且忽略固定时薪 */
-S.setSet(Object.assign(S.getSet(), { otMode: 'mult' }));
-cm = S.calcMonth('2026-10');
-// 2700÷174×1.5 = 23.275862… ×2h = 46.5517 → 46.55（与 rate 的 46.56 只差 1 分，正是"舍入口径"差异）
-ok('[mult] 平日 2h = 46.55', cm.otWd === 46.55, cm.otWd);
-ok('[mult] 周末 6h = 186.21', cm.otWe === 186.21, cm.otWe);
-ok('[mult] 法定 4h = 186.21', cm.otHol === 186.21, cm.otHol);
-ok('[mult] 与 rate 模式结果确实不同', cm.otMoney !== ratePay, cm.otMoney + ' vs ' + ratePay);
-ok('[mult] 生效时薪带着倍数说明', /倍 = /.test(S.otNote(cm, 1)), S.otNote(cm, 1));
-const multPay2700 = cm.otMoney;
-S.setSet(Object.assign(S.getSet(), { base: 5000 }));
-const cmB = S.calcMonth('2026-10');
-ok('[mult] 底薪 2700→5000 加班费跟着涨', cmB.otMoney > multPay2700, multPay2700 + ' → ' + cmB.otMoney);
-// mult 模式下改固定时薪不应有任何影响
-S.setSet(Object.assign(S.getSet(), { otRate1: 999, otRate2: 999, otRate3: 999 }));
-ok('[mult] 改固定时薪完全不影响结果（互斥）', S.calcMonth('2026-10').otMoney === cmB.otMoney, S.calcMonth('2026-10').otMoney);
-S.setSet(Object.assign(S.getSet(), { base: 2700, otRate1: 23.28, otRate2: 31.03, otRate3: 46.55 }));
+/* 5.4 加班单价只跟基本工资走（公司工资条口径） */
+S.setBaseMap({ '2026-10': 2700 });
+S.setSet(Object.assign(S.getSet(), { base: 2700, stdOt: 174 }));
+const R27 = S.otRatesFor('2026-10', S.getSet());
+ok('2700 ÷ 174 × 1.5 = 23.2759', Math.abs(R27.r1 - 2700 / 174 * 1.5) < 1e-9, R27.r1);
+ok('2700 ÷ 174 × 2 = 31.0345', Math.abs(R27.r2 - 2700 / 174 * 2) < 1e-9, R27.r2);
+S.setBaseMap({ '2026-10': 2520 });
+S.setSet(Object.assign(S.getSet(), { base: 2520 }));
+const R25 = S.otRatesFor('2026-10', S.getSet());
+ok('2520 ÷ 174 × 1.5 = 21.7241', Math.abs(R25.r1 - 2520 / 174 * 1.5) < 1e-9, R25.r1);
+ok('2520 ÷ 174 × 2 = 28.9655', Math.abs(R25.r2 - 2520 / 174 * 2) < 1e-9, R25.r2);
+S.setBaseMap({});
+S.setSet(Object.assign(S.getSet(), { base: 2700 }));
 
-/* 5.4 切回 rate 应立刻恢复原值 */
-S.setSet(Object.assign(S.getSet(), { otMode: 'rate' }));
-ok('切回 rate 后结果复原', S.calcMonth('2026-10').otMoney === ratePay, S.calcMonth('2026-10').otMoney);
-
-/* 5.5 节假日改动 → 已有记录重算（这是本次修的核心 bug） */
-S.setCustom([]);
-S.setRecs([S.buildRec('2026-10-12', 'work', 8, '')]);   // 周一，平日 8h 正常出勤
-let r0 = S.getRecs()[0];
-ok('初始：周一 8h → n=8 d=0', r0.n === 8 && r0.d === 0 && r0.h === 0, JSON.stringify([r0.n, r0.d, r0.h]));
-const beforePay = S.calcMonth('2026-10').otMoney;
-ok('初始加班费为 0', beforePay === 0, beforePay);
-
-// 把这一天设成「节假日加班档」→ 8h 应全部变成节假日加班
-S.setCustom([{ date: '2026-10-12', name: '公司假', kind: 'holiday' }]);
-const nChanged = S.resplitRecords();
-S.refreshHome();
-let r1 = S.getRecs()[0];
-ok('新增自定义节假日 → resplitRecords 报告改动 1 条', nChanged === 1, nChanged);
-ok('记录已重算：n=0 h=8', r1.n === 0 && r1.h === 8, JSON.stringify([r1.n, r1.d, r1.w, r1.h]));
-ok('工资已按新归类重算 (8×46.55=372.40)', S.calcMonth('2026-10').otMoney === 372.4, S.calcMonth('2026-10').otMoney);
-
-// 切成周末加班档 → 应变成 w=8
-S.setCustom([{ date: '2026-10-12', name: '公司假', kind: 'weekend' }]);
-S.resplitRecords();
-let r2 = S.getRecs()[0];
-ok('切档后：w=8 h=0', r2.w === 8 && r2.h === 0, JSON.stringify([r2.n, r2.d, r2.w, r2.h]));
-ok('工资按周末档重算 (8×31.03=248.24)', S.calcMonth('2026-10').otMoney === 248.24, S.calcMonth('2026-10').otMoney);
-
-// 删除自定义节假日 → 回到工作日
-S.setCustom([]);
-const nBack = S.resplitRecords();
-let r3 = S.getRecs()[0];
-ok('删除后 resplitRecords 报告改动', nBack === 1, nBack);
-ok('记录回到 n=8', r3.n === 8 && r3.w === 0 && r3.h === 0, JSON.stringify([r3.n, r3.d, r3.w, r3.h]));
-ok('工资回到 0', S.calcMonth('2026-10').otMoney === 0);
-ok('isHoliday/isWeekend 标记同步更新', r3.isHoliday === 0 && r3.isWeekend === 0, JSON.stringify([r3.isHoliday, r3.isWeekend]));
+/* 5.5 内置法定节假日表仅用于「没有工资条的月份推算应出勤工时」 */
+ok('法定当天识别为 holiday', S.classify('2026-10-01').type === 'holiday', S.classify('2026-10-01').type);
+ok('调休补班日识别为 workday', S.classify('2026-10-10').type === 'workday', S.classify('2026-10-10').type);
+ok('普通周末识别为 weekend', S.classify('2026-10-11').type === 'weekend', S.classify('2026-10-11').type);
+ok('classify 不再读自定义节假日', !/var cs = getCustom/.test(script));
+ok('节假日管理页已移除', html.indexOf('id="page-holidays"') < 0);
+ok('自定义节假日存储已无入口', !/window\.addHoliday/.test(script));
 
 // 工时缺失的旧记录不能被杀掉
 S.setRecs([{ date: '2026-10-13', type: 'work', hours: 0, n: 8, d: 0, w: 0, h: 0 }]);
@@ -227,7 +190,6 @@ S.resplitRecords();
 ok('工时缺失但有拆分的旧记录被保留', S.getRecs()[0].n === 8, JSON.stringify(S.getRecs()[0]));
 
 /* 5.6 保存打卡不跳首页 */
-S.setCustom([]);
 S.setRecs([]);
 S._editDate = '';
 S.$('pDate').value = '2026-10-14';
@@ -251,40 +213,24 @@ S.doCommitPunch(S.buildRec('2026-10-14', 'work', 9, '改过'));
 ok('编辑保存后回记录页', document.getElementById('page-records').className.indexOf('on') >= 0,
   document.getElementById('page-records').className);
 
-/* 5.8 设置页：两套值都收、模式开关高亮、互斥标注 */
+/* 5.8 设置页：collectSettings 按工资条口径收参 */
 S.$('sBase').value = '2700';
-S.$('sRate1').value = '23.28'; S.$('sRate2').value = '31.03'; S.$('sRate3').value = '46.55';
-S.$('sOT1').value = '1.5'; S.$('sOT2').value = '2'; S.$('sOT3').value = '3';
-S.$('sSocial').value = '420'; S.$('sTaxThr').value = '5000'; S.$('sTaxRate').value = '0.03';
+S.$('sSocial').value = '421.04';
 S.$('sFull').value = '100'; S.$('sPerf').value = '50'; S.$('sPost').value = '400';
-S.$('sMeal').value = '15'; S.$('sMealCap').value = '360'; S.$('sStd').value = '174';
-S.$('sStdOt').value = '174'; S.$('sAuto').value = '11'; S.$('sTaxOn').value = 'off';
+S.$('sSenior').value = '50'; S.$('sOther').value = '0';
+S.$('sMeal').value = '15';
+S.$('sStdOt').value = '174';
+S.$('sTaxThr').value = '5000'; S.$('sTaxRate').value = '0.03'; S.$('sTaxOn').value = 'off';
 const cs = S.collectSettings();
-ok('collectSettings 同时收下两套参数', cs.ot1 === 1.5 && cs.otRate1 === 23.28 && cs.otMode === 'rate',
-  JSON.stringify([cs.otMode, cs.ot1, cs.otRate1]));
-ok('collectSettings 收下其余字段', cs.base === 2700 && cs.stdOt === 174 && cs.auto === 11);
-
-S.setOtMode('mult');
-ok('setOtMode 落库为 mult', S.otModeOf(S.getSet()) === 'mult', S.getSet().otMode);
-ok('切换后固定时薪那组灰显', document.getElementById('blkRate').className === 'modeBlock off',
-  document.getElementById('blkRate').className);
-ok('切换后倍数那组高亮', document.getElementById('blkMult').className === 'modeBlock on',
-  document.getElementById('blkMult').className);
-ok('倍数组标注生效中', document.getElementById('tagMult').textContent.indexOf('生效') >= 0,
-  document.getElementById('tagMult').textContent);
-ok('固定时薪组标注未参与计算', document.getElementById('tagRate').textContent === '未参与计算',
-  document.getElementById('tagRate').textContent);
-S.renderOtModeUI();
-const modeBtns = document.getElementById('otModeRow').querySelectorAll('.typeItem');
-ok('模式按钮高亮跟着走', modeBtns[1].className === 'typeItem on' && modeBtns[0].className === 'typeItem',
-  modeBtns.map(b => b.className).join(' | '));
-
-S.setOtMode('rate');
-ok('切回 rate 落库正确', S.otModeOf(S.getSet()) === 'rate', S.getSet().otMode);
-ok('切回后倍数组变未参与计算', document.getElementById('tagMult').textContent === '未参与计算',
-  document.getElementById('tagMult').textContent);
-ok('切换模式不丢另一套的值', S.getSet().ot1 === 1.5 && S.getSet().otRate1 === 23.28,
-  JSON.stringify([S.getSet().ot1, S.getSet().otRate1]));
+ok('collectSettings 收下工资条参数',
+  cs.base === 2700 && cs.social === 421.04 && cs.stdOt === 174 && cs.meal === 15,
+  JSON.stringify([cs.base, cs.social, cs.stdOt, cs.meal]));
+ok('collectSettings 收下奖金三项（绩效/岗位/工龄）',
+  cs.perf === 50 && cs.post === 400 && cs.senior === 50, JSON.stringify([cs.perf, cs.post, cs.senior]));
+ok('collectSettings 已无旧字段（otMode/固定时薪/倍数/自动补卡）',
+  cs.otMode === undefined && cs.otRate1 === undefined && cs.ot1 === undefined
+  && cs.auto === undefined && cs.std === undefined);
+ok('collectSettings 收下餐补上限 360', cs.mealCap === 360, cs.mealCap);
 
 /* 5.9 缺勤按钮（回归） */
 S.pickType('absent');
@@ -295,8 +241,7 @@ S.pickType('work');
 ok('选上班 → 按钮文案「保存打卡」', document.getElementById('savePunchBtn').textContent === '保存打卡');
 
 /* ---------- 6. 每月标准工时：两套方案 ---------- */
-section('6. 每月标准工时（两套方案）');
-S.setCustom([]);
+section('6. 应出勤工时（工资条 / 手动 / 自动推算）');
 S.setRecs([]);
 S.setStdMap({});
 const stub = id => document.getElementById(id);
@@ -313,9 +258,6 @@ S.applyStdMonth();
 si = S.stdInfo('2026-10');
 ok('方案A 手动套用 168h 生效', si.baseDiv === 168, si.baseDiv);
 ok('方案A 来源标记 manual', si.stdSrc === 'manual', si.stdSrc);
-ok('方案A 标签订为「本月生效」', stub('tagStdManual').textContent.indexOf('生效') >= 0,
-  stub('tagStdManual').textContent);
-ok('方案B 标签为「未生效」', stub('tagStdNet').textContent === '未生效', stub('tagStdNet').textContent);
 ok('出勤比例分母真的用上了 168', S.calcMonth('2026-10').stdBase === 168, S.calcMonth('2026-10').stdBase);
 ok('写入带时间戳', /^\d\d-\d\d \d\d:\d\d$/.test(S.stdInfo('2026-10').stdAt), S.stdInfo('2026-10').stdAt);
 
@@ -327,13 +269,11 @@ stub('sStdMonth').value = 'abc';
 S.applyStdMonth();
 ok('方案A 输入非数字被拒绝', S.stdInfo('2026-10').baseDiv === 168, S.stdInfo('2026-10').baseDiv);
 
-// 6.4 方案 B：联网更新（直接写存储 + 重渲染，等价于 netUpdateStd 成功后的动作）
+// 6.4 读工资条写入应出勤工时（来源标记 sheet）
 S.setStdForMonth('2026-10', 176, 'net');
 S.renderStdSection();
 si = S.stdInfo('2026-10');
 ok('方案B 联网写入 176h 生效', si.baseDiv === 176 && si.stdSrc === 'net', si.baseDiv + '/' + si.stdSrc);
-ok('方案B 切换后标签互换', stub('tagStdNet').textContent.indexOf('生效') >= 0
-  && stub('tagStdManual').textContent === '未生效', stub('tagStdNet').textContent + '/' + stub('tagStdManual').textContent);
 
 // 6.5 清除 → 回到自动
 S.clearStdMonth();
@@ -382,56 +322,60 @@ ok('calcMonth 带出标准工时来源', S.calcMonth('2026-10').stdSrc === 'auto
 /* ---------- 7. 设置页瘦身：手风琴互斥 ---------- */
 section('7. 设置页手风琴');
 S.renderSettings();
-const heads = { g1: stub('acc-g1'), g2: stub('acc-g2'), g3: stub('acc-g3'), g4: stub('acc-g4'), g5: stub('acc-g5') };
+const heads = { g1: stub('acc-g1'), g2: stub('acc-g2'), g3: stub('acc-g3'), g4: stub('acc-g4') };
 // 模拟 page-settings 下的 accHead 列表
-const headEls = ['g1','g2','g3','g4','g5'].map(g => ({ className: g === 'g1' ? 'accHead on' : 'accHead', getAttribute: () => g }));
+const headEls = ['g1','g2','g3','g4'].map(g => ({ className: g === 'g1' ? 'accHead on' : 'accHead', getAttribute: () => g }));
 document.querySelectorAll = sel => (sel === '#page-settings .accHead' ? headEls : []);
 heads.g1.className = 'accBody on';
-['g2','g3','g4','g5'].forEach(g => { heads[g].className = 'accBody'; });
+['g2','g3','g4'].forEach(g => { heads[g].className = 'accBody'; });
 
 S.toggleAcc({ getAttribute: () => 'g3', className: 'accHead' });
 ok('打开 g3 后 g3 展开', heads.g3.className.indexOf('on') >= 0, heads.g3.className);
 ok('打开 g3 时 g1 自动收起（互斥，这是瘦身关键）', heads.g1.className.indexOf('on') < 0, heads.g1.className);
-ok('只有一组处于展开状态', ['g1','g2','g3','g4','g5'].filter(g => heads[g].className.indexOf('on') >= 0).length === 1);
+ok('只有一组处于展开状态', ['g1','g2','g3','g4'].filter(g => heads[g].className.indexOf('on') >= 0).length === 1);
 S.toggleAcc({ getAttribute: () => 'g3', className: 'accHead on' });
 ok('再点一次收起 g3', heads.g3.className.indexOf('on') < 0, heads.g3.className);
-ok('全部收起时一个都不开', ['g1','g2','g3','g4','g5'].filter(g => heads[g].className.indexOf('on') >= 0).length === 0);
+ok('全部收起时一个都不开', ['g1','g2','g3','g4'].filter(g => heads[g].className.indexOf('on') >= 0).length === 0);
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.3', S.APP_VER === '2.3', S.APP_VER);
-ok('title 带 v2.2', /<title>[^<]*v2\.3[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.3', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.3</string>') >= 0);
+ok('APP_VER = 2.4', S.APP_VER === '2.4', S.APP_VER);
+ok('title 带 v2.4', /<title>[^<]*v2\.4[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.4', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.4</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
-ok('折叠标题摘要：底薪', stub('sumBase').textContent.indexOf('底薪') >= 0, stub('sumBase').textContent);
-ok('折叠标题摘要：加班方式', stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.3') >= 0, stub('uVersion').innerHTML);
+ok('折叠标题摘要：奖金基数', stub('sumPay').textContent.indexOf('奖金') >= 0, stub('sumPay').textContent);
+ok('折叠标题摘要：加班折算', stub('sumOt').textContent.indexOf('174') >= 0 || stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.4') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });
 ok('点折叠后主题名仍是中文（不被覆盖）', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 
-/* ---------- 9. 保存设置后两套加班参数都不丢 ---------- */
+/* ---------- 9. 保存设置：工资条参数回归 ---------- */
 section('9. 保存设置回归');
 S.setStdMap({});
 stub('sBase').value = '2800';
-stub('sRate1').value = '24.00'; stub('sRate2').value = '32.00'; stub('sRate3').value = '48.00';
-stub('sOT1').value = '1.6'; stub('sOT2').value = '2.1'; stub('sOT3').value = '3.1';
-stub('sStdOt').value = '174'; stub('sSocial').value = '430'; stub('sTaxThr').value = '5000';
-stub('sTaxRate').value = '0.03'; stub('sFull').value = '110'; stub('sPerf').value = '60';
-stub('sPost').value = '420'; stub('sMeal').value = '16'; stub('sMealCap').value = '370';
-stub('sAuto').value = '10'; stub('sTaxOn').value = 'off';
+stub('sStdOt').value = '174';
+stub('sSocial').value = '430';
+stub('sTaxThr').value = '5000';
+stub('sTaxRate').value = '0.03';
+stub('sFull').value = '110'; stub('sPerf').value = '60';
+stub('sPost').value = '420'; stub('sSenior').value = '55'; stub('sOther').value = '20';
+stub('sMeal').value = '16'; stub('sTaxOn').value = 'off';
 S.saveSettings();
 const saved = S.getSet();
-ok('保存后底薪 2800', saved.base === 2800, saved.base);
-ok('保存后两套加班参数都在', saved.otRate1 === 24 && saved.ot1 === 1.6, saved.otRate1 + '/' + saved.ot1);
-ok('保存后 otMode 保持', S.otModeOf(saved) === 'rate', saved.otMode);
-ok('std 兜底值仍在（非 NaN）', isFinite(saved.std) && saved.std > 0, saved.std);
-ok('底薪按月落库', parseFloat(S.getBaseMap()['2026-10']) === 2800, JSON.stringify(S.getBaseMap()));
+ok('保存后基本工资 2800', saved.base === 2800, saved.base);
+ok('保存后奖金三项（绩效/岗位/工龄）', saved.perf === 60 && saved.post === 420 && saved.senior === 55,
+  JSON.stringify([saved.perf, saved.post, saved.senior]));
+ok('保存后社保/全勤/餐补', saved.social === 430 && saved.full === 110 && saved.meal === 16,
+  JSON.stringify([saved.social, saved.full, saved.meal]));
+ok('保存后不再写回旧字段', saved.otMode === undefined && saved.otRate1 === undefined && saved.auto === undefined);
+ok('加班分母仍是 174（非 NaN）', saved.stdOt === 174, saved.stdOt);
+ok('基本工资按月落库', parseFloat(S.getBaseMap()['2026-10']) === 2800, JSON.stringify(S.getBaseMap()));
 
 /* ---------- 10. HR 工资条对照 ---------- */
 section('10. HR 工资条对照');
@@ -991,6 +935,83 @@ ok('HR 页 DOM id 齐备',
    'hrDataWrap', 'hrMonthLabel', 'hrStatus', 'hrFetchBtn', 'hrPayRows', 'hrPayHint',
    'hrCmpRows', 'hrCmpHint', 'hrDayRows', 'hrImpHint', 'hrAccount']
     .every(id => html.indexOf('id="' + id + '"') >= 0));
+
+/* ---------- 17. 公司日考勤 → 本地记录（婚假 / 加班 / 漏卡） ---------- */
+section('17. 日考勤同步（含婚假等假别）');
+{
+  // 用公司真实的 calc_field 结构造数据（不含任何个人身份信息）
+  const kqRows = [
+    { id_date: '2026-11-02', calc_field1: 0, calc_field3: 0, calc_field5: 0, calc_field24: 8 }, // 周一 婚假
+    { id_date: '2026-11-03', calc_field1: 8, calc_field3: 3, calc_field5: 0 },                 // 周二 出勤+加班
+    { id_date: '2026-11-04', calc_field1: 0, calc_field3: 0, calc_field5: 11 },                // 周三 周末档
+    { id_date: '2026-11-05', calc_field1: 0, calc_field3: 0, calc_field5: 0 },                 // 全 0 → 跳过
+  ];
+  const built = S.hrBuildFromKqDetail('2026-11', kqRows);
+  ok('婚假 calc_field24 识别为请假', built.leaves === 1, built.leaves);
+  ok('出勤记录 2 条', built.works === 2, built.works);
+  ok('全 0 的天被跳过', built.skipped === 1, built.skipped);
+  const lvRec = built.recs.find(r => r.type === 'absent');
+  ok('请假记录带 leave 工时 8h', lvRec && lvRec.leave === 8, lvRec && lvRec.leave);
+  ok('请假 note 写明假别（婚假）', lvRec && /婚假/.test(lvRec.note), lvRec && lvRec.note);
+
+  const wRec = built.recs.find(r => r.date === '2026-11-03');
+  ok('正班/加班直接搬公司值 n=8 d=3', wRec && wRec.n === 8 && wRec.d === 3, wRec && (wRec.n + '/' + wRec.d));
+  const w2 = built.recs.find(r => r.date === '2026-11-04');
+  ok('周末档直接搬公司值 w=11', w2 && w2.w === 11, w2 && w2.w);
+
+  S.setRecs(built.recs);
+  S.setStdForMonth('2026-11', 176, 'manual');
+  S.setBaseMap({ '2026-11': 2700 });
+  const m11 = S.calcMonth('2026-11');
+  ok('婚假落在工作日 → 扣 8h', m11.leaveHours === 8, m11.leaveHours);
+  ok('正班合计 = 176 − 8 = 168h', m11.attendHours === 168, m11.attendHours);
+  ok('正班工资 = 2700÷176×168 = 2577.27', m11.base === 2577.27, m11.base);
+  ok('当月应发出勤工资 = 正班 + 加班', m11.attend === Math.round((m11.base + m11.otMoney) * 100) / 100, m11.attend);
+
+  // 「截至今日」：当月不该把未来工作日算成出勤
+  S._freezeMonthEnd = false;
+  const nowYM = S.ymNow();
+  const me = S.calcMonth(nowYM);
+  ok('当月 stdElapsed ≤ stdBase', me.stdElapsed <= me.stdBase, me.stdElapsed + '/' + me.stdBase);
+  ok('当月 attendHours 不超过 stdElapsed', me.attendHours <= me.stdElapsed, me.attendHours);
+  ok('历史月份仍按整月口径', S.calcMonth('2026-11').stdElapsed === 176, S.calcMonth('2026-11').stdElapsed);
+  S._freezeMonthEnd = true;
+  S.setRecs([]);
+  S.setStdMap({});
+}
+
+/* ---------- 18. 餐补上限（公司实测封顶 360） ---------- */
+section('18. 餐补 = min(出勤天数 × 每日餐补, 上限)');
+{
+  // 造 25 个出勤日（对应 7 月：正班 23 天 + 周末 2 天，25×15=375 应封顶到 360）
+  const recs = [];
+  for (let d = 1; d <= 25; d++) {
+    const ds = '2026-07-' + String(d).padStart(2, '0');
+    recs.push({ date: ds, type: 'work', hours: 8, n: 8, d: 0, w: 0, h: 0, src: 'kqdetail', note: 'test' });
+  }
+  S.setRecs(recs);
+  S.setStdForMonth('2026-07', 184, 'manual');
+  S.setBaseMap({ '2026-07': 2520 });
+  S.setSet(Object.assign(S.getSet(), { meal: 15, mealCap: 360 }));
+  const m7 = S.calcMonth('2026-07');
+  ok('25 天 × 15 = 375', m7.mealRaw === 375, m7.mealRaw);
+  ok('封顶后餐补 = 360', m7.meal === 360, m7.meal);
+
+  // 去掉 6 天 → 19 天 × 15 = 285，不触发封顶
+  S.setRecs(recs.slice(0, 19));
+  const m9 = S.calcMonth('2026-07');
+  ok('19 天 × 15 = 285（未封顶）', m9.meal === 285, m9.meal);
+
+  // 上限可改
+  S.setSet(Object.assign(S.getSet(), { mealCap: 300 }));
+  const m300 = S.calcMonth('2026-07');
+  ok('上限改成 300 → 285 仍不受影响', m300.meal === 285, m300.meal);
+
+  S.setRecs([]);
+  S.setStdMap({});
+  S.setBaseMap({});
+  S.setSet(Object.assign(S.getSet(), { meal: 15, mealCap: 360 }));
+}
 
 console.log('\n结果: ' + passes + ' 通过, ' + fails + ' 失败');
 process.exit(fails ? 1 : 0);
