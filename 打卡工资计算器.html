@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.6</title>
+<title>打卡工资计算器 v2.7</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -207,6 +207,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 .hr{height:1px; background:var(--line); margin:14px 0;}
 .hint{font-size:12px; color:var(--ink3);}
 .notice-badge{background:var(--chip); color:var(--main-deep); border-radius:10px; padding:2px 9px; font-size:12px; font-weight:700;}
+.badge.paid{background:#e6f6ec; color:#1a8b46;}
 .pill{display:inline-block; background:var(--chip); color:var(--main-deep); border-radius:10px; padding:3px 10px; font-size:12px; font-weight:700;}
 
 /* theme dots */
@@ -505,86 +506,98 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
       <span style="width:52px;"></span>
     </header>
     <div class="scroll">
+
       <div class="card pad helpSec">
         <h3>📌 功能简介</h3>
-        <p>打卡工资计算器：打卡页可选「上班打卡」或「缺勤」，上班打卡只需录入工时；法定节假日休息、普通休息仍按当天日期与是否打卡<b>自动判定</b>。自动识别工作日 / 周末 / 法定节假日并拆分正常工时与平日 / 周末 / 节假日加班，加班费按设置里选定的计算方式算；按设定参数自动计算当月工资。节假日管理里可自定义日期并指定它属于<b>周末加班档</b>还是<b>节假日加班档</b>。所有数据保存在本机，无需服务器。</p>
+        <p>一句话：<b>本机不再打卡，直接读公司考勤和工资条，用公司工资条的口径把当月工资算给你看。</b></p>
+        <p>首次打开输入一次公司账号密码（「保存登录」默认已勾上），之后每次启动<b>自动登录并读取</b>，不用再点任何按钮。底部四个页签：<b>首页</b>（当月工资明细）、<b>记录</b>（每日工时）、<b>公司</b>（工资条对照 / 日考勤同步 / 月报签收）、<b>设置</b>（参数）。</p>
       </div>
+
       <div class="card pad helpSec">
-        <h3>🕐 工时判定规则</h3>
-        <p>1. 工作日上班：8 小时内计正常出勤，超过 8 小时的部分计为<b>平日加班</b>（第 1 档）。<br>
-        2. 周末上班：全部工时计为<b>周末加班</b>（第 2 档），不计正常出勤。<br>
-        3. <b>法定节假日当天</b>上班：全部工时计<b>节假日加班</b>（第 3 档）。注意：只有国家强制三倍工资的法定节假日当天才走这一档（元旦 1 天、春节除夕+初一~初三 4 天、清明 1 天、劳动节 2 天、端午 1 天、中秋 1 天、国庆 3 天，共 13 天/年）；同一次放假的<b>连休日</b>属休息日，走周末加班档（第 2 档）。<br>
-        4. 未打卡的日期自动判定：<b>法定节假日→休息</b>(按 8h 计入有效出勤、享有底薪)；<b>周末 / 放假连休日→普通休息</b>(无底薪、不影响全勤)；<b>工作日→缺勤</b>(当月全勤清零)。当月未来日期暂不算缺勤。<br>
-        5. 打卡页可手动选 <b>「缺勤」</b> 记录某天缺勤（不用填工时）；缺勤一律清零全勤奖，休息日/节假日记缺勤也同样清零。<br>
-        6. 点「保存打卡」后<b>停留在打卡页</b>不回首页（方便接着录下一天），日期保持在刚存的那天；从记录页点「编辑」进去的，保存后回记录页。</p>
-        <p>自动补卡只填充工作日；周末、法定节假日、放假连休日、已有记录的日期自动跳过。内置 2026–2029 节假日（调休补班日待官方发布后可用「联网更新」校正）。</p>
-        <p><b>每月标准工时（两套方案）：</b>它同时就是底薪折算分母 ——「有效出勤工时 ÷ 本月标准工时（封顶 100%）= 出勤比例」，用来折算底薪 / 岗位补贴 / 绩效。<br>
-        · <b>方案 A 自己填</b>：填工资条上的「应出勤工时」（如 176 / 168），点「套用到本月」。<br>
-        · <b>方案 B 联网更新</b>：按当月工作日 × 8 自动算（法定节假日与调休都已算进去）。<br>
-        两套写的是同一个「本月标准工时」，以最后一次写入的为准，设置页会标出本月用的是哪一套；没设过的月份按「工作日 × 8」自动推算，「清除本月」可回到自动推算。<br>
-        <span style="color:var(--ink3);">v2.0 起原来的「底薪折算分母：当月排班 / 固定值」开关已并入本月标准工时 —— 想用固定值就手动填到每个月，避免两个设置互相覆盖。</span></p>
-        <p><b>节假日改动会重算已有记录：</b>记录里存的是打卡当时的归类快照，所以新增 / 删除自定义节假日、或给它「切档」之后，程序会按新归类把全部记录的正常 / 平日 / 周末 / 节假日工时重新拆分，工资立刻更新，toast 里会告知重算了几条；设置页「⑤ 更多」里也能手动触发一次。</p>
+        <h3>🕐 数据来源与工时判定</h3>
+        <p>每天的工时来自公司两个接口，<b>取两者较大值</b>（谁算得多用谁，保证不漏加班）：</p>
+        <p>· <b>日考勤</b>（ctlKqDetail）：公司自己折算好的结果 —— <span class="fx">calc_field1</span>=正班、<span class="fx">calc_field3</span>=平时加班、<span class="fx">calc_field5</span>=周末加班、<span class="fx">calc_field19</span>=事假、<span class="fx">calc_field20</span>=病假、<span class="fx">calc_field21</span>=年假、<span class="fx">calc_field24</span>=婚假。<br>
+        · <b>原始打卡</b>（ctlKqsOriginCardRecord）：实时，但只有打卡时刻，按班次口径折算。</p>
+        <p><b>为什么两个都要：</b>公司日考勤有延迟。实测 10/16 公司只给了正班 8h（缺 3h 加班）、10/17 周六整条还没更新，而打卡已经是 08:18~21:00。只读日考勤会少算。</p>
+        <p><b>档位以公司为准：</b>公司若把某天记为休息日（<span class="fx">f5&gt;0</span> 且无正班），就整天进休息日加班档，<b>不让本机内置节假日表参与判断</b>。实测 2026-09-20（周日）公司按周末给 11h，内置表却当调休补班日，会多算 3h。</p>
+        <p><b>假别分两类：</b><br>
+        · <b>事假</b>：扣正班工时，且当月全勤奖清零。<br>
+        · <b>婚假 / 年假 / 病假</b>：属带薪假，<b>不扣工资、不影响全勤</b>，只在记录里标注。<br>
+        另外只有<b>落在应出勤工作日</b>的假才参与扣减：10/7 的婚假落在国庆假期里，那天本来就没算进应出勤，扣了就是重复扣。</p>
+        <p><b>班次口径</b>（用于把打卡时刻折算成工时，<b>一律取整数小时</b>）：正班 = 落在 <b>8:20-11:50 + 12:50-17:20</b> 内的时长（满勤 8h）；加班 = <b>18:00</b> 之后，正常 3h；迟到 / 早退才按实际扣减；周末与法定节假日上班整天计 11h。早到和 17:20 后的零星时间不计。</p>
+        <p><b>「漏卡」判定：</b>公司考勤只覆盖到某天时，那天之后不判漏卡（公司还没出数据，不是你没上班）。实测 10/19 公司还没记录，不会被误判。</p>
       </div>
+
       <div class="card pad helpSec">
-        <h3>🧮 工资计算公式</h3>
-        <p>当月总收入 = 底薪 + 岗位补贴 + 绩效奖金 + 全勤奖 + 加班工资 + 餐补 − 社保扣除</p>
-        <p><b>有效出勤工时</b> = 正常出勤工时 + 法定节假日休息天数 × 8</p>
-        <p><b>出勤比例</b> = min(有效出勤工时 ÷ 本月标准工时, 1)</p>
-        <p>底薪 / 岗位补贴 / 绩效奖金 均乘以出勤比例；缺勤则全勤奖为 0，否则全额发放。</p>
-        <p><b>正常时薪</b> = 底薪 ÷ 加班时薪分母（默认 174）<br>
-        <b>加班工资</b> = 平日加班工时 × 第1档时薪 + 周末加班工时 × 第2档时薪 + 节假日加班工时 × 第3档时薪</p>
-        <p><b>三档时薪怎么来 —— 设置里二选一，只会有一套参与计算：</b><br>
-        · <b>固定时薪</b>（默认）：直接在设置里填单价（元/小时），默认 23.28 / 31.03 / 46.55。单价<b>不随底薪变化</b>，适合按工资条上写死的加班单价算。<br>
-        · <b>底薪倍数</b>：单价 = 底薪 ÷ 加班时薪分母 × 倍数（默认 1.5 / 2 / 3）。单价<b>跟着底薪浮动</b>，适合公司按法定倍数发加班费。<br>
-        两套参数都会保存，切换方式不丢值；没生效的那一套在设置页灰显并标注「未参与计算」，<b>永远不会同时参与计算</b>。</p>
-        <p><b>餐补</b> = min(上班打卡天数 × 每日餐补, 餐补上限)；社保为固定扣除。</p>
+        <h3>🧮 工资计算公式（公司工资条口径）</h3>
+        <p>全部按公司工资条的真实算法，用 2026-07 / 08 / 09 三个月工资条逐个金额验证过：</p>
+        <p><b>正班合计</b> = 截至今日的应出勤工时 − 请假工时（<b>不是</b>实打卡工时）<br>
+        <b>正班工资</b> = 基本工资 ÷ 应出勤工时 × 正班合计<br>
+        <b>平时加班工资</b> = 平时加班工时 × (基本工资 ÷ <b>174</b> × 1.5)<br>
+        <b>周末加班工资</b> = 周末加班工时 × (基本工资 ÷ 174 × 2)<br>
+        <b>当月应发出勤工资</b> = 正班工资 + 平时加班 + 周末加班<br>
+        <b>奖金汇总</b> = (绩效 + 岗位 + 工龄) × (正班合计 ÷ 应出勤工时)<br>
+        <b>应发工资</b> = 出勤工资 + 奖金汇总 + 全勤奖 + 其它补贴合计（餐补在内）<br>
+        <b>实发工资</b> = 应发工资 − 个人社保 − 个税</p>
+        <p><b>餐补</b> = min(出勤天数 × 每日餐补, 每月上限)。公司实测：7 月 25 天×15=375 → 封顶 <b>360</b>；8 月 23 天=345、9 月 19 天=285 都没触发。</p>
+        <p><b>加班单价为什么要 ÷174 而不是 ÷应出勤工时：</b>底薪折算用「应出勤工时」（如 176 / 168），加班单价折算用固定的 <b>174</b>（21.75 天 × 8，法定月计薪天数）。两者口径不同，混用会对不上工资条。</p>
+        <p><b>月底会自然收敛：</b>月中的「截至今日」只算已经过去的工作日，到月末自动等于整月应出勤，和工资条一致。9 月实测：176 − 32(事假) = 144，正班工资 2209.09，与工资条逐分相同。</p>
       </div>
+
       <div class="card pad helpSec">
         <h3>⚙️ 默认参数一览</h3>
-        <p>底薪 2700 元 · 加班费默认按<b>固定时薪</b>：平日 23.28 / 周末 31.03 / 法定节假日 46.55 元/小时 · 备用的<b>底薪倍数</b>模式为 1.5 / 2 / 3 倍 · 社保扣除 420 元 · 全勤奖 100 元 · 绩效奖金 50 元 · 岗位补贴 400 元 · 餐补 15 元/天（上限 360 元/月）· 加班时薪分母 174h · 本月标准工时按「工作日×8」自动推算（可手动填或联网更新）· 自动补卡工时 11 小时。</p>
+        <p>基本工资 2700 元（按月保存，读工资条会自动写入）· 应出勤工时按「工作日×8」自动推算，读到工资条后自动换成工资条上的值 · 加班时薪分母 <b>174</b>（倍数固定 1.5 / 2 / 3）· 社保 420 元 · 全勤奖 100 元 · 绩效 50 元 · 岗位 400 元 · 工龄奖 0 元 · 每日餐补 15 元（<b>每月上限 360</b>）· 其他补贴 0 元 · 个税默认不计。</p>
       </div>
+
       <div class="card pad helpSec">
         <h3>📋 记录导出格式</h3>
         <div class="fx">日期|类型|上班工时|正常工时|平日加班|周末加班|节假日加班|是否节假日|是否周末|备注</div>
-        <p style="margin-top:6px;">类型：work=上班打卡，holiday=法定节假日休息，rest=普通休息，absent=缺勤。支持追加 / 覆盖两种导入模式。</p>
+        <p style="margin-top:6px;">类型：work=上班（公司考勤），absent=请假/缺勤，holiday=法定节假日休息，rest=普通休息。支持追加 / 覆盖两种导入模式。</p>
       </div>
+
       <div class="card pad helpSec">
-        <h3>🏢 公司页（工资条对照 / 打卡导入 / 月报签收）</h3>
-        <p>底部导航第 4 个是<b>「公司」</b>页，用来跟公司系统（hr.voopootech.net）对数据。三件事：<br>
+        <h3>🏢 公司页（工资条对照 / 日考勤同步 / 月报签收）</h3>
+        <p>底部导航第 3 个是<b>「公司」</b>页，用来跟公司系统（hr.voopootech.net）对数据。三件事：<br>
         <b>① 网页工资条</b>：读取公司在册工资条的全部项目。<br>
         <b>② 工资条对照</b>：把工资条每一项和本机算出来的同名项并排显示，逐项给出差额（本机 − 网页），一致显绿、不一致显红。<br>
-        <b>③ 日考勤 → 同步本机（自动覆盖）</b>：公司已折算好的每日正班 / 平时加班 / 周末加班 / 请假工时，整月覆盖写入本机。</p>
-        <p><b>登录</b>：源码里<b>不预置任何账号</b>，必须自己输账号密码。勾选「保存登录」会把账号存到本机，下次自动填好，但仍需点一下「登录」。<b>登录以服务器返回为准</b>——密码错了会留在登录页并显示原因，可改完直接重试。</p>
+        <b>③ 日考勤 → 同步本机（自动覆盖）</b>：公司折算好的每日正班 / 加班 / 请假工时，整月覆盖写入本机。</p>
+        <p><b>登录</b>：源码里<b>不预置任何账号</b>。首次手输账号密码并勾上「保存登录」，之后启动<b>自动登录并读取</b>；登录失效才会回到登录页。登录以服务器返回为准 —— 密码错了会显示原因，改完直接重试。</p>
         <p><b>两个接口的月份范围不同（重要）：</b><br>
         · <b>工资条</b>：任意月份都能查（当月未结算会提示）。<br>
         · <b>考勤 / 打卡</b>：<b>只有本月和上月</b>，查更早的月份服务端会回落到上月。<br>
-        所以查 7、8 月时只有工资条、没有打卡可导入；9、10 月反之。跨月时对照页会<b>拦掉金额差额</b>，只列工资条原始项——因为不同月份的正班 / H1 / H2 / 底薪是两套数字，直接相减必然错。</p>
+        所以查更早的月份时只有工资条、没有考勤可同步；跨月时对照页会<b>拦掉金额差额</b>，只列工资条原始项。</p>
+        <p><b>参数会自动对齐</b>：读一次工资条，会把「应出勤工时 / 基本工资 / 绩效 / 岗位 / 工龄 / 社保 / 全勤」按工资条写入，算出来自然一致。</p>
       </div>
-      <div class="card pad helpSec">
-        <h3>📥 打卡导入规则（公司班次口径）</h3>
-        <p><b>v2.3 起自动同步</b>：点一次「读取HR数据」，日考勤会整月覆盖写入本机，不再需要手动打卡。考勤有变更时重读一次即自动对齐。入口：记录页顶部「📥 同步公司日考勤」，或公司页的同步卡片。</p>
-        <p>工时<b>不按打卡分钟精确累加</b>，而是按公司班次口径折算，<b>统计一律取整数</b>：<br>
-        · <b>正班</b> = 实际落在 <b>8:20-11:50 + 12:50-17:20</b> 内的时长，满勤 <b>8h</b>；<br>
-        · <b>加班</b> = <b>18:00</b> 之后，正常 <b>3h</b>；<br>
-        · <b>迟到 / 早退如实扣减</b>（唯一需要计较分钟的场景）；<br>
-        · 周六日与法定节假日上班整天计入休息日加班（约 11h）。<br>
-        早到、17:20 之后的零星时间<b>不计</b>。例：真实打卡 <span class="fx">08:12 11:51 / 12:45 17:21 / 17:55 21:00</span> → <b>正班 8h + 加班 3h</b>（按分钟精确累加会得到 11.33h，那是错的）。</p>
-        <p><b>每次导入会先清空所选日期的原有记录</b>（手动打卡 / 自动补卡 / 上次导入的）再整片写入，避免新旧混在一起、同一天两条。只有一条卡（漏打）不会丢弃整天，会按 21:00 下班补齐并标红提示。<b>导入的记录直接参与本页的工资计算</b>。</p>
-        <p><b>导入后没记录的工作日自动算缺勤</b>，会清零全勤奖。导入前会预览本月有哪些工作日没记录、会清零多少全勤奖，例如「⚠ 2026-09 有 4 天没有打卡记录（2、3、4、16 日）」。若其中有请假 / 调休，可在记录页手动补一条。</p>
-      </div>
+
       <div class="card pad helpSec">
         <h3>✍️ 考勤月报签收</h3>
         <p>公司页的<b>「考勤月报签收」</b>读取 WPS「时薪考勤月报」，查询条件是<b>年份 + 月份 + 工号 + 姓名</b>（四个都必填）。<br>
-        · <b>工号与姓名自动取自公司系统</b>（每次「读取HR数据」时从考勤行里抓），不用手填；<br>
+        · <b>工号与姓名自动取自公司系统</b>（每次读取数据时从考勤行里抓），不用手填；<br>
         · <b>年份月份由你填</b>，默认按当前查看的月份预填。</p>
         <p>点「去签收」会弹出覆盖全屏的签收窗口，四个条件已自动填好并查询；在该页面上<b>手写签名</b>，再点「确认签收」即可。签过的月份页面显示「已签收 + 签收时间 + 查看签名」，<b>签收按钮会消失</b>——签了就不能再签。</p>
         <p><span style="color:var(--ink3);">签收请求是页面 JS 加密后发出的，所以必须在 App 内打开真网页完成，不能由本程序代签。</span></p>
       </div>
+
       <div class="card pad helpSec">
         <h3>🔒 数据与兼容性说明</h3>
-        <p>打卡工资计算器 <b>v2.2</b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。本页已按 iOS 兼容要求处理安全区、弹窗布局与事件绑定。</p>
+        <p>打卡工资计算器 <b><span id="helpVer">v2.7</span></b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。</p>
         <p>公司页的账号密码<b>只存在本机</b>（勾选「保存登录」时才落盘），不会上传到任何地方；本程序的源码里不含任何账号信息。</p>
       </div>
+
+      <div class="card pad helpSec">
+        <h3>💬 联系作者</h3>
+        <p>用着有问题、想加功能、或者你的公司口径又变了，直接找我：</p>
+        <p style="font-size:16px;line-height:2;">
+          🐧 QQ：<a href="mqqapi://card/show_pslcard?src_type=internal&amp;version=1&amp;uin=3126473&amp;card_type=person&amp;source=qrcode" style="color:var(--main-deep);font-weight:700;text-decoration:none;">3126473</a>
+          <span style="font-size:12px;color:var(--ink3);">（点一下直接打开 QQ 加好友）</span>
+        </p>
+        <p style="font-size:16px;line-height:2;">
+          💻 GitHub：<a href="https://github.com/hailanshi" target="_blank" rel="noopener" style="color:var(--main-deep);font-weight:700;text-decoration:none;">github.com/hailanshi</a>
+          <span style="font-size:12px;color:var(--ink3);">（点一下打开浏览器）</span>
+        </p>
+        <p style="font-size:12px;color:var(--ink3);margin-top:10px;">如果 QQ 没弹出来，说明手机还没装 QQ，装好再点一次即可。</p>
+      </div>
+
     </div>
   </section>
 
@@ -654,7 +667,7 @@ var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYY
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 var LS_KQCOVER = 'punchSalaryKqCover_v1'; // 每月考勤数据覆盖到的最后一天 {YYYY-MM:YYYY-MM-DD}
 
-var APP_VER = '2.6';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.7';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   /* ===== 公司工资条口径：只有这些参数 ===== */
@@ -1553,12 +1566,21 @@ function recRowHtml(r){
     sub = '法定节假日休息（计入 8h 出勤）';
   } else if (r.type === 'rest'){
     sub = '普通休息';
+  } else if (r.type === 'absent'){
+    if (r.deduct === false){
+      sub = '带薪假' + (r.leaveKind ? '（' + r.leaveKind + '）' : '') + '，不扣工资、不影响全勤';
+    } else {
+      sub = '事假（扣正班工时、当月全勤清零）';
+    }
   } else {
     sub = '缺勤（当月全勤清零）';
   }
   if (r.note) sub += ' · ' + esc(r.note);
+  var isPaid = (r.type === 'absent' && r.deduct === false);
+  var badgeCls = isPaid ? 'paid' : meta.badge;
+  var badgeTxt = isPaid ? '带薪假' : (r.type === 'absent' ? '事假' : meta.short);
   return '<div class="rec"><div class="top"><div class="d">' + line1 + '</div>' +
-    '<span class="badge ' + meta.badge + '">' + meta.short + '</span></div>' +
+    '<span class="badge ' + badgeCls + '">' + badgeTxt + '</span></div>' +
     '<div class="sub">' + sub + '</div>' +
     '<div class="ops">' +
         '<button type="button" class="opBtn del" onclick="window.askDeleteRecord(\'' + r.date + '\')">删除</button>' +
@@ -3313,17 +3335,24 @@ function hrAfterToast(rec, ym, alignTxt, syncTxt){
 }
 
 function boot(){
-  try{
-    initYM();
-    applyTheme(getThemeKey());
-    resplitRecords();   /* 启动时把存量记录按当前节假日规则对齐（升级后历史数据也能算对） */
-    resetPunchForm();
-    refreshHome();
-    refreshRecords();
-    loadBanner();
-    hrLoadAcct();       /* 把已保存的公司账号预填到登录框 */
-    hrAutoStart();      /* 存过账号就自动登录并读取，没有才显示登录页 */
-  }catch(e){}
+  /* 每一步单独 try：任何一步出错都不能拖累后面（之前 resetPunchForm 已被删除却仍在调用，
+   * 一个 ReferenceError 就把公告栏和自动登录全吞了）。 */
+  var steps = [
+    ['initYM',        function(){ initYM(); }],
+    ['applyTheme',    function(){ applyTheme(getThemeKey()); }],
+    ['resplitRecords',function(){ resplitRecords(); }],
+    ['refreshHome',   function(){ refreshHome(); }],
+    ['refreshRecords',function(){ refreshRecords(); }],
+    ['loadBanner',    function(){ loadBanner(); }],
+    ['hrLoadAcct',    function(){ hrLoadAcct(); }],
+    ['hrAutoStart',   function(){ hrAutoStart(); }]
+  ];
+  for (var i=0;i<steps.length;i++){
+    try{ steps[i][1](); }
+    catch(e){
+      try{ console.error('[boot] ' + steps[i][0] + ' 失败: ' + (e && e.message ? e.message : e)); }catch(e2){}
+    }
+  }
 }
 boot();
 

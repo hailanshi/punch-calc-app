@@ -145,10 +145,35 @@ static void _installCrashHandlers(void) {
     }
 }
 
-/* 允许访问网络接口（QQ 公告、工作日联网更新） */
+/* 允许访问网络接口（QQ 公告）；同时放行外部 App scheme（mqqapi:// 等）
+ * —— 说明页的「加我 QQ」需要真的跳转到 QQ，否则会被 WebView 当成非法 URL 拦掉。 */
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
         decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
-    decisionHandler(WKNavigationActionPolicyAllow);
+    NSURL *url = navigationAction.request.URL;
+    NSString *scheme = url.scheme.lowercaseString;
+    if ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"]
+        || [scheme isEqualToString:@"file"] || [scheme isEqualToString:@"about"]
+        || [scheme isEqualToString:@"data"] || [scheme isEqualToString:@"blob"]) {
+        decisionHandler(WKNavigationActionPolicyAllow);
+        return;
+    }
+    /* 其余 scheme（mqqapi:// / mqq:// / weixin:// …）交给系统去打开对应 App */
+    _writeLogLine([NSString stringWithFormat:@"external scheme -> %@", scheme ?: @""]);
+    if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
+    decisionHandler(WKNavigationActionPolicyCancel);
+}
+
+/* target="_blank" 的链接（GitHub 等）在当前 WebView 里打开，免得点了没反应 */
+- (WKWebView *)webView:(WKWebView *)webView
+    createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration
+               forNavigationAction:(WKNavigationAction *)navigationAction
+                    windowFeatures:(WKWindowFeatures *)windowFeatures {
+    if (navigationAction.request.URL) {
+        [webView loadRequest:navigationAction.request];
+    }
+    return nil;
 }
 
 - (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation
