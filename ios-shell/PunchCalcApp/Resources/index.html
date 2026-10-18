@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="打卡工资">
 <meta name="theme-color" id="metaTheme" content="#FF80AB">
-<title>打卡工资计算器 v2.8</title>
+<title>打卡工资计算器 v2.9</title>
 <style>
 :root{
   --main:#FF80AB; --main-deep:#e0608a; --soft:#FFF0F4; --soft2:#fff7fa;
@@ -568,7 +568,7 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
       <div class="card pad helpSec">
         <h3>🔒 数据与兼容性说明</h3>
-        <p>打卡工资计算器 <b><span id="helpVer">v2.8</span></b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。</p>
+        <p>打卡工资计算器 <b><span id="helpVer">v2.9</span></b>。数据保存在本机 localStorage。在 iPhone Safari「添加到主屏幕」可作为 PWA 使用；也可套入 WKWebView 壳打包为 TrollStore 可安装的 IPA。</p>
         <p>公司页的账号密码<b>只存在本机</b>（勾选「保存登录」时才落盘），不会上传到任何地方；本程序的源码里不含任何账号信息。</p>
       </div>
 
@@ -632,6 +632,57 @@ textarea.read{width:100%; min-height:150px; border:1px solid var(--line); border
 
 <div id="toasts"></div>
 
+<!-- ==================== 启动登录闸门（不登录不让进） ==================== -->
+<div class="gate" id="loginGate" style="display:none;">
+  <div class="gateCard">
+    <div class="gateIcon">💰</div>
+    <div class="gateTitle">打卡工资计算器</div>
+    <div class="gateSub" id="gateSub">首次使用请输入公司账号密码<br>登录一次后会保存在本机，之后打开自动进入</div>
+    <div class="field">
+      <label>账号</label>
+      <input type="text" id="gateUser" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="公司工号">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" id="gatePass" autocomplete="off" placeholder="密码">
+    </div>
+    <button type="button" class="btn main block" id="gateBtn" onclick="window.gateLogin()">登录并进入</button>
+    <div class="hint" id="gateHint" style="text-align:center; margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- ==================== 记录编辑弹窗 ==================== -->
+<div class="gate" id="editGate" style="display:none; z-index:9998;">
+  <div class="gateCard">
+    <div class="gateTitle" id="editTitle">编辑记录</div>
+    <div class="gateSub" id="editDateLbl"></div>
+    <div class="field">
+      <label>类型</label>
+      <select id="editType" onchange="window.editTypeChange()">
+        <option value="work">上班</option>
+        <option value="paid">带薪假（婚假 / 年假等，不扣钱）</option>
+        <option value="absent">事假（扣正班 + 清全勤）</option>
+        <option value="rest">休息（不影响工资）</option>
+      </select>
+    </div>
+    <div class="field" id="editHoursRow">
+      <label>工时（小时）</label>
+      <input type="number" id="editHours" step="0.5" min="0" max="24">
+      <div class="unit" id="editSplit"></div>
+    </div>
+    <div class="field">
+      <label>备注</label>
+      <input type="text" id="editNote" maxlength="60" placeholder="例如：手动修正">
+    </div>
+    <div style="display:flex; gap:8px; margin-top:4px;">
+      <button type="button" class="btn ghost" style="flex:1;" onclick="window.closeEdit()">取消</button>
+      <button type="button" class="btn main" style="flex:1;" onclick="window.saveEdit()">保存</button>
+    </div>
+    <div class="hint" id="editHint" style="text-align:center; margin-top:10px;"></div>
+  </div>
+</div>
+
+
 <script id="appJS">
 /* =====================================================================
  * 打卡工资计算器 - 单文件应用
@@ -655,7 +706,7 @@ var LS_STD  = 'punchSalaryStdMap_v1';   // 每月标准工时(联网更新) {YYY
 var LS_BASE = 'punchSalaryBaseMap_v1';  // 每月底薪(按月锁定) {YYYY-MM:元}
 var LS_KQCOVER = 'punchSalaryKqCover_v1'; // 每月考勤数据覆盖到的最后一天 {YYYY-MM:YYYY-MM-DD}
 
-var APP_VER = '2.8';                    /* 版本号：设置页「更多」与说明页都会显示 */
+var APP_VER = '2.9';                    /* 版本号：设置页「更多」与说明页都会显示 */
 
 var DEFAULTS = {
   /* ===== 公司工资条口径：只有这些参数 ===== */
@@ -1091,7 +1142,9 @@ function toast(msg, kind){
 /* ---------------- 主题 ---------------- */
 function applyTheme(key){
   var t = THEMES[key] || THEMES.pink;
-  var root = document.documentElement.style;
+  var de = document.documentElement;
+  if (!de || !de.style) return;          /* 非浏览器环境（自检沙箱）直接跳过 */
+  var root = de.style;
   root.setProperty('--main', t.main);
   root.setProperty('--main-deep', t.deep);
   root.setProperty('--soft', t.soft);
@@ -2230,7 +2283,12 @@ function hrResetLoginFields(){
 /* 登录卡 / 数据卡切换 */
 /* ---------------- 启动登录闸门：不登录不让进 ---------------- */
 function gateShow(msg){
-  var g = $('loginGate'); if (!g) return;
+  var g = $('loginGate');
+  if (!g){
+    /* 极端情况下（DOM 还没就绪）稍后再试一次，绝不能让闸门失效 */
+    setTimeout(function(){ var g2 = $('loginGate'); if (g2){ g2.style.display = 'flex'; } }, 60);
+    return;
+  }
   g.style.display = 'flex';
   var o = storeGet(LS_HRACCT, null);
   if (o && o.u){
@@ -3416,8 +3474,12 @@ function boot(){
     }
   }
 }
-boot();
-
+/* 等 DOM 就绪再启动：闸门元素必须已解析，否则 gateShow 拿到 null 直接进软件 */
+if (typeof document !== 'undefined' && document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
 /* ---------------- 显式挂到 window（WKWebView 内联 onclick 依赖） ---------------- */
 window.showHelp = showHelp;
 window.showHome = showHome;
@@ -3469,56 +3531,6 @@ window.doImportOverwrite = doImportOverwrite;
 window.doResetSettings = doResetSettings;
 window.toast = toast;
 </script>
-
-<!-- ==================== 启动登录闸门（不登录不让进） ==================== -->
-<div class="gate" id="loginGate" style="display:none;">
-  <div class="gateCard">
-    <div class="gateIcon">💰</div>
-    <div class="gateTitle">打卡工资计算器</div>
-    <div class="gateSub" id="gateSub">首次使用请输入公司账号密码<br>登录一次后会保存在本机，之后打开自动进入</div>
-    <div class="field">
-      <label>账号</label>
-      <input type="text" id="gateUser" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="公司工号">
-    </div>
-    <div class="field">
-      <label>密码</label>
-      <input type="password" id="gatePass" autocomplete="off" placeholder="密码">
-    </div>
-    <button type="button" class="btn main block" id="gateBtn" onclick="window.gateLogin()">登录并进入</button>
-    <div class="hint" id="gateHint" style="text-align:center; margin-top:10px;"></div>
-  </div>
-</div>
-
-<!-- ==================== 记录编辑弹窗 ==================== -->
-<div class="gate" id="editGate" style="display:none; z-index:9998;">
-  <div class="gateCard">
-    <div class="gateTitle" id="editTitle">编辑记录</div>
-    <div class="gateSub" id="editDateLbl"></div>
-    <div class="field">
-      <label>类型</label>
-      <select id="editType" onchange="window.editTypeChange()">
-        <option value="work">上班</option>
-        <option value="paid">带薪假（婚假 / 年假等，不扣钱）</option>
-        <option value="absent">事假（扣正班 + 清全勤）</option>
-        <option value="rest">休息（不影响工资）</option>
-      </select>
-    </div>
-    <div class="field" id="editHoursRow">
-      <label>工时（小时）</label>
-      <input type="number" id="editHours" step="0.5" min="0" max="24">
-      <div class="unit" id="editSplit"></div>
-    </div>
-    <div class="field">
-      <label>备注</label>
-      <input type="text" id="editNote" maxlength="60" placeholder="例如：手动修正">
-    </div>
-    <div style="display:flex; gap:8px; margin-top:4px;">
-      <button type="button" class="btn ghost" style="flex:1;" onclick="window.closeEdit()">取消</button>
-      <button type="button" class="btn main" style="flex:1;" onclick="window.saveEdit()">保存</button>
-    </div>
-    <div class="hint" id="editHint" style="text-align:center; margin-top:10px;"></div>
-  </div>
-</div>
 
 </body>
 </html>

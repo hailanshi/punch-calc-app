@@ -308,17 +308,17 @@ ok('全部收起时一个都不开', ['g1','g2','g3','g4'].filter(g => heads[g].
 
 /* ---------- 8. 版本号与摘要 ---------- */
 section('8. 版本号与摘要');
-ok('APP_VER = 2.8', S.APP_VER === '2.8', S.APP_VER);
-ok('title 带 v2.8', /<title>[^<]*v2\.8[^<]*<\/title>/.test(html));
-ok('Info.plist 版本为 2.8', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
-  .indexOf('<string>2.8</string>') >= 0);
+ok('APP_VER = 2.9', S.APP_VER === '2.9', S.APP_VER);
+ok('title 带 v2.9', /<title>[^<]*v2\.9[^<]*<\/title>/.test(html));
+ok('Info.plist 版本为 2.9', fs.readFileSync(path.join(path.dirname(htmlPath), 'ios-shell/PunchCalcApp/Info.plist'), 'utf8')
+  .indexOf('<string>2.9</string>') >= 0);
 S.renderSettings();
 ok('摘要卡片有内容', stub('setSummary').innerHTML.indexOf('当前生效') >= 0);
 ok('摘要显示本月标准工时来源', stub('setSummary').innerHTML.indexOf('自动推算') >= 0);
 ok('折叠标题摘要：标准工时', stub('sumStd').textContent.length > 0, stub('sumStd').textContent);
 ok('折叠标题摘要：奖金基数', stub('sumPay').textContent.indexOf('奖金') >= 0, stub('sumPay').textContent);
 ok('折叠标题摘要：加班折算', stub('sumOt').textContent.indexOf('174') >= 0 || stub('sumOt').textContent.length > 0, stub('sumOt').textContent);
-ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.8') >= 0, stub('uVersion').innerHTML);
+ok('版本号写进「更多」', stub('uVersion').innerHTML.indexOf('v2.9') >= 0, stub('uVersion').innerHTML);
 ok('主题名显示中文', stub('themeNow').textContent === '粉色', stub('themeNow').textContent);
 /* 回归：点折叠会调 renderAccSums，曾经把主题名覆盖回「pink 主题」 */
 S.toggleAcc({ getAttribute: () => 'g2', className: 'accHead' });

@@ -1,8 +1,20 @@
-# 打卡工资计算器 v2.8
+# 打卡工资计算器 v2.9
 
 单文件 `打卡工资计算器.html` 实现全部功能，无后端、纯本机存储；可直接双击用浏览器打开，
 iPhone Safari 打开后「添加到主屏幕」即作为 PWA 使用；`ios-shell/` 内含极简 WKWebView 壳工程，
 可交叉编译为 TrollStore 可安装的 IPA。
+
+## v2.9 变更要点（修登录闸门不生效）
+
+- **真 bug**：v2.8 把闸门的 HTML 插在 `</body>` 前，而 `<script id="appJS">` 在它**之前**，
+  所以 `boot()` 执行时 `loginGate` 还没进 DOM，`gateShow()` 拿到 `null` 直接静默返回
+  —— 结果**首次安装也不会弹登录框，直接进软件**。
+  现在闸门与编辑弹窗移到 `<script>` 之前，`boot()` 也改为等 `DOMContentLoaded`，
+  `gateShow()` 另加 60ms 延迟重试兜底。
+- 实测三种场景：无账号 → 弹闸门；有账号且密码对 → 自动登录直接进；
+  有账号但密码错 → 重新弹闸门并显示服务器原因。
+- `applyTheme` 加环境判断（无 `document.documentElement` 时直接返回），避免自检沙箱里抛错。
+- 版本号 2.9（APP_VER；iOS 两处 Info.plist 同步为 2.9 / build 11）。
 
 ## v2.8 变更要点（启动强制登录 + 记录可编辑）
 
